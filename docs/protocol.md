@@ -238,6 +238,56 @@ target    = playback.position + (playback.playing ? serverNow - playback.publish
 （`driverClientId` 置空）——房主下一次心跳自然接管。已播放的内容保留，不清空，
 免得大家的画面突然变空白。
 
+### `GET /api/room/:roomId/queue`
+
+取整条队列。队列内容**不进快照**（可能很长），快照里只给 `queueVersion` 和
+`queueLength`，客户端发现版本变了再来拉这一条。
+
+```json
+{
+  "ok": true,
+  "queueVersion": 7,
+  "queue": [
+    {
+      "id": "a3f19c",
+      "track": { "...SPlayer Track" },
+      "addedBy": "a7b6265283128bf2",
+      "addedAt": 1790874599000,
+      "insertNext": false
+    }
+  ],
+  "serverTime": 1790874599421
+}
+```
+
+### `POST /api/room/:roomId/queue`
+
+改队列。三种动作共用这一个入口。
+
+| 动作 | 字段 | 权限 |
+| --- | --- | --- |
+| `add` | `tracks`（最多 50 条）、`position?`（`next` / `end`，默认 `end`） | **谁都可以** —— 队列是张点歌单 |
+| `remove` | `entryId` | 需要控制权 |
+| `clear` | — | 需要控制权 |
+
+「需要控制权」与 `/publish` 同一套规则：`host` 模式下只有房主（或持有有效房主令牌的人），
+`all` 模式下谁都可以。没资格时返回 `403 NOT_ALLOWED`。
+
+```json
+{ "clientId": "a7b6265283128bf2", "action": "add", "tracks": [ /* Track */ ] }
+```
+
+**响应**每次都把整条队列带回来，省一次往返：
+
+```json
+{ "ok": true, "changed": 1, "queueVersion": 8, "queue": [ /* QueueEntry[] */ ], "serverTime": … }
+```
+
+`changed` 是这次实际影响了几项。加歌时如果队列里已经有同一首歌（按 `source:id` 判断），
+会被跳过，此时 `changed` 为 `0`。
+
+队列长度上限 200，超出从队尾丢（保住在眼前的那些）。
+
 ### `POST /api/room/:roomId/poll`
 
 拉取房间快照；版本没变化就挂起最多 `wait` 毫秒。
@@ -304,6 +354,10 @@ interface RoomSnapshot {
   driverClientId: string | null;
   members: MemberInfo[];
   serverTime: number;
+  /** 队列版本，队列一变就 +1；客户端据此决定要不要重新拉队列 */
+  queueVersion: number;
+  /** 队列长度；内容走 /queue 单独拉 */
+  queueLength: number;
 }
 
 interface Playback {

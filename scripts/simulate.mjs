@@ -268,6 +268,65 @@ const main = async () => {
   check("带上了正在播放的曲目摘要", mine?.nowPlaying?.title, "换人之后的歌");
   check("带上了艺人", mine?.nowPlaying?.artists, ["测试歌手"]);
   check("带上了播放态", mine?.playing, true);
+
+  // ── 14. 共享队列 ───────────────────────────────────────────────────────────
+  console.log("\n[14] 共享队列：大家的「下一首」从同一份来");
+
+  const queuePost = (body) =>
+    fetch(`${BASE}/api/room/${ROOM}/queue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    }).then((response) => response.json());
+
+  // 此时 guest 是房主、host 已经变成听众
+  const added = await queuePost({
+    clientId: host.state.clientId,
+    action: "add",
+    tracks: [track("5001", "队列甲"), track("5002", "队列乙")],
+  });
+  check("谁都可以往队列里加歌（点歌）", added.changed, 2);
+  check("队列里有两首", added.queue.length, 2);
+  check("顺序就是入队顺序", added.queue.map((entry) => entry.track.title), ["队列甲", "队列乙"]);
+
+  const duplicate = await queuePost({
+    clientId: host.state.clientId,
+    action: "add",
+    tracks: [track("5001", "队列甲")],
+  });
+  check("同一首歌不会重复入队", duplicate.changed, 0);
+
+  const withQueue = await guest.poll(300);
+  check("快照里带上了队列长度", withQueue.room.queueLength, 2);
+  check("也带上了队列版本", typeof withQueue.room.queueVersion, "number");
+
+  const fetchedQueue = await getJson(`/api/room/${ROOM}/queue`);
+  check("队列内容单独拉得到", fetchedQueue.queue.length, 2);
+
+  const denied = await queuePost({
+    clientId: host.state.clientId,
+    action: "remove",
+    entryId: added.queue[0].id,
+  });
+  check("「只有房主可调」模式下听众删不掉", denied.ok, false);
+  check("拒绝码", denied.code, "NOT_ALLOWED");
+
+  const removed = await queuePost({
+    clientId: guest.state.clientId,
+    hostToken: guest.state.hostToken,
+    action: "remove",
+    entryId: added.queue[0].id,
+  });
+  check("控制者可以删", removed.changed, 1);
+  check("删完只剩一首", removed.queue.length, 1);
+
+  const cleared = await queuePost({
+    clientId: guest.state.clientId,
+    hostToken: guest.state.hostToken,
+    action: "clear",
+  });
+  check("控制者可以清空", cleared.changed, 1);
+  check("清空后队列是空的", cleared.queue.length, 0);
 };
 
 /**
@@ -321,12 +380,12 @@ const startTempServer = async (port, env) => {
 };
 
 /**
- * [14] 超时释放：房主 / 控制者掉线后，位子要腾出来，别让房间卡死。
+ * [15] 超时释放：房主 / 控制者掉线后，位子要腾出来，别让房间卡死。
  *
  * 这一步需要很短的成员超时，所以自己拉一个临时服务端。
  */
 const timeoutScenario = async () => {
-  console.log("\n[14] 超时释放：房主/控制者掉线后位子腾出来");
+  console.log("\n[15] 超时释放：房主/控制者掉线后位子腾出来");
 
   const server = await startTempServer(8799, { MEMBER_TTL_MS: 1200 });
   if (!server) {
@@ -381,10 +440,10 @@ const timeoutScenario = async () => {
 };
 
 /**
- * [15] 服务端密钥：设了之后谁都得带对才能用，陌生人连房间都建不了。
+ * [16] 服务端密钥：设了之后谁都得带对才能用，陌生人连房间都建不了。
  */
 const keyScenario = async () => {
-  console.log("\n[15] 服务端密钥：没带或带错都进不来");
+  console.log("\n[16] 服务端密钥：没带或带错都进不来");
 
   const SECRET = "s3cret-for-test";
   const server = await startTempServer(8801, { SERVER_KEY: SECRET });

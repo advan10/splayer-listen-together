@@ -1,13 +1,13 @@
 /**
  * @name        Listen Together
  * @id          listen-together.splayer
- * @version     0.3.0
+ * @version     0.4.0
  * @description 一起听：把当前播放同步到自建服务端，或跟着房主一起播放（默认网易云）
  * @author      Re-BeiChen
  * @type        control
  * @apiLevel    2
  * @grant       network control ui
- * @changelog   修「大家都可以调」模式下控制者来回漂的问题；加「本地暂停不影响别人」
+ * @changelog   加房间共享队列（可经 MCP 同步到本机播放列表）；修重载后身份重复的问题
  */
 
 /*
@@ -26,7 +26,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 /** 长轮询的服务端等待时长与客户端超时（客户端必须更大，先让服务端开口） */
 const POLL_WAIT_MS = 25_000;
@@ -61,6 +61,7 @@ const SETTING_KEYS = [
   "syncPlayState",
   "syncSeek",
   "localPause",
+  "syncQueue",
   "seekThresholdMs",
   "heartbeatSec",
   "verboseLog",
@@ -89,6 +90,7 @@ const readSettings = () => {
   settings.syncPlayState = Boolean(get("syncPlayState", true));
   settings.syncSeek = Boolean(get("syncSeek", true));
   settings.localPause = Boolean(get("localPause", false));
+  settings.syncQueue = Boolean(get("syncQueue", false));
   settings.seekThresholdMs = Number(get("seekThresholdMs", 2000)) || 2000;
   settings.heartbeatSec = Number(get("heartbeatSec", 5)) || 5;
   settings.verboseLog = Boolean(get("verboseLog", false));
@@ -206,6 +208,13 @@ splayer.register({
       description: "暂停时只停自己这一份，其他人照常；继续播放时自动追上进度。由你在控时仍会正常同步",
     },
     {
+      key: "syncQueue",
+      type: "switch",
+      label: "同步房间队列",
+      default: false,
+      description: "把房间队列里新加的歌推进本机播放列表，大家的下一首才会是同一首（需要 MCP）",
+    },
+    {
       key: "syncSeek",
       type: "switch",
       label: "同步播放进度",
@@ -235,6 +244,7 @@ splayer.register({
   menus: [
     { id: "status", label: "一起听：状态" },
     { id: "sync-now", label: "一起听：立即同步" },
+    { id: "add-queue", label: "一起听：把这首歌加入房间队列" },
     { id: "toggle-mode", label: "一起听：切换控制模式" },
     { id: "take-host", label: "一起听：我当房主" },
     { id: "open-room", label: "一起听：打开房间页面" },
@@ -359,17 +369,17 @@ const adoptRoom = (room) => {
 let forcedRole = null;
 
 /** 调一次我们自己的服务端；网络错误不抛，统一返回 { ok, status, body, error } */
-const api = async (path, body, timeout = API_TIMEOUT_MS) => {
+const api = async (path, body, timeout = API_TIMEOUT_MS, method = "POST") => {
   const sentAt = Date.now();
   try {
     const response = await splayer.request(`${settings.serverUrl}${path}`, {
-      method: "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
         "X-Client": `splayer-plugin/${VERSION}`,
         ...(settings.serverKey ? { "X-Server-Key": settings.serverKey } : {}),
       },
-      body: JSON.stringify(body),
+      ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
       responseType: "json",
       timeout,
     });
@@ -416,11 +426,14 @@ const joinRoom = async () => {
   const body = result.body;
   session.clientId = body.clientId;
   session.isHost = Boolean(body.isHost);
+  // 身份要留住：只存在内存里的话，插件一重载就会以新身份重新加入，
+  // 旧的成员记录要等超时才消失，中间这段时间同一个人会显示成两个成员
+  void splayer.storage.set("clientId", body.clientId).catch(() => {});
+  void splayer.storage.set("roomId", settings.roomId).catch(() => {});
   if (typeof body.hostToken === "string") {
     session.hostToken = body.hostToken;
-    // 房主令牌要跨重启保留，否则每次开应用都会丢掉房主位
+    // 房主令牌同理，丢了每次开应用都会重新抢一次房主位
     void splayer.storage.set("hostToken", body.hostToken).catch(() => {});
-    void splayer.storage.set("roomId", settings.roomId).catch(() => {});
   }
   session.version = body.room ? body.room.version : 0;
   session.latest = body.room || null;
@@ -803,6 +816,14 @@ const applyRoom = async (room) => {
   session.latest = room;
   session.version = room.version;
   adoptRoom(room);
+
+  // 队列和「此刻在放什么」是两件事：队列版本变了就同步一次本机播放列表，
+  // 放在下面那些早退之前处理，免得「现在没人在播」时把队列同步也一起跳过
+  if (typeof room.queueVersion === "number" && room.queueVersion !== lastQueueVersion) {
+    lastQueueVersion = room.queueVersion;
+    void syncRoomQueue();
+  }
+
   const playback = room.playback;
 
   // 房间还没人播放 / 是我自己上报的东西，都不用跟随
@@ -880,6 +901,76 @@ const applyRoom = async (room) => {
   suppressPublish();
   splayer.player.seek(Math.max(0, Math.round(target)));
   notePosition(target);
+};
+
+/* ========================================================================== *
+ *  房间共享队列
+ *
+ *  队列放在服务端，大家的「下一首」才会是同一首 —— 各人本地队列互相独立时，
+ *  一首放完每个人会各自走向自己的下一首，直接乱掉。
+ *
+ *  本机这一侧只有一条路能碰播放队列：MCP 的 add_to_queue（控制插件 API 里
+ *  没有队列接口）。也就是说只能往里加，读不到也删不掉 —— 服务端删掉的歌，
+ *  本机这份要等它自己放完。所以这里是「尽量对齐」，不是双向同步。
+ * ========================================================================== */
+
+/** 已推进本机播放队列的条目 id，避免重复推 */
+const pushedQueueEntries = new Set();
+/** 上次见过的队列版本 */
+let lastQueueVersion = -1;
+
+/** 拉一次房间队列 */
+const fetchRoomQueue = async () => {
+  const result = await api(
+    `/api/room/${encodeURIComponent(settings.roomId)}/queue`,
+    null,
+    API_TIMEOUT_MS,
+    "GET",
+  );
+  if (!result.ok || !result.body || !Array.isArray(result.body.queue)) return null;
+  return result.body;
+};
+
+/** 把房间队列里还没推过的歌加进本机播放队列 */
+const syncRoomQueue = async () => {
+  if (!settings.enabled || !session.joined || !settings.syncQueue) return;
+  if (!mcp.configured) {
+    noticeOnce("queue-no-mcp", "同步房间队列需要开启 MCP（要用它的 add_to_queue）");
+    return;
+  }
+
+  const snapshot = await fetchRoomQueue();
+  if (!snapshot) return;
+
+  const fresh = snapshot.queue.filter((entry) => !pushedQueueEntries.has(entry.id));
+  if (fresh.length === 0) return;
+
+  // 标了「紧接着放」的用 next，其余补到队尾。
+  // next 是逐个插到当前歌后面，所以要倒着推，先入队的才排在前面。
+  const toInsertNext = fresh.filter((entry) => entry.insertNext).reverse();
+  const toAppend = fresh.filter((entry) => !entry.insertNext);
+
+  const push = async (entries, position) => {
+    if (entries.length === 0) return true;
+    const result = await mcp.callTool("add_to_queue", {
+      tracks: entries.map((entry) => entry.track),
+      position,
+    });
+    if (!result.ok) {
+      log.warn("[一起听] 房间队列同步失败：", result.message);
+      return false;
+    }
+    for (const entry of entries) pushedQueueEntries.add(entry.id);
+    return true;
+  };
+
+  if (!(await push(toInsertNext, "next"))) return;
+  if (!(await push(toAppend, "end"))) return;
+
+  // 记过的条目不用留太久，防止长会话里无限膨胀
+  if (pushedQueueEntries.size > 2_000) pushedQueueEntries.clear();
+
+  log.info(`[一起听] 房间队列已同步 ${fresh.length} 首到本机播放列表`);
 };
 
 /* ========================================================================== *
@@ -1079,9 +1170,13 @@ const start = async () => {
   session.version = 0;
   retryDelay = RETRY_MIN_MS;
   detached = false;
+  lastQueueVersion = -1;
+  pushedQueueEntries.clear();
 
   // 先同步试一次，好让「状态」菜单立刻能给出结果；失败也没关系，循环里会自愈
   await joinRoom();
+  // 房间可能已经有队列了，主动拉一次，别等到第一次长轮询回来才同步
+  if (session.joined) void syncRoomQueue();
   void subscribeLoop(mine);
   void publishLoop(mine);
 };
@@ -1162,12 +1257,27 @@ for (const key of SETTING_KEYS) {
 // 链接里不带密钥 —— 分享出去的地址是干净的，看的人自己在网页上填一次
 const roomUrl = () => `${settings.serverUrl}/room/${encodeURIComponent(settings.roomId)}`;
 
-splayer.on("menuClick", async ({ menuId }) => {
+splayer.on("menuClick", async ({ menuId, track }) => {
   switch (menuId) {
     case "open-room":
       return { openUrl: roomUrl() };
     case "copy-room":
       return { copyText: roomUrl() };
+    case "add-queue": {
+      if (!session.joined) return { toast: "还没连上服务端" };
+      if (!track) return { toast: "当前没有歌曲" };
+      const result = await api(`/api/room/${encodeURIComponent(settings.roomId)}/queue`, {
+        clientId: session.clientId,
+        hostToken: session.hostToken || undefined,
+        action: "add",
+        tracks: [track],
+      });
+      if (!result.ok) return { toast: `加不进去：${result.error || "网络错误"}` };
+      if (!result.body || !result.body.changed) {
+        return { toast: `「${track.title}」已经在房间队列里了` };
+      }
+      return { toast: `已加入房间队列：${track.title}` };
+    }
     case "toggle-mode": {
       if (!session.joined) return { toast: "还没连上服务端" };
       const current = session.latest ? session.latest.controlMode : session.controlMode;
@@ -1204,12 +1314,13 @@ splayer.on("menuClick", async ({ menuId }) => {
     }
     case "status": {
       const members = session.latest ? session.latest.members.length : 0;
+      const queued = session.latest ? session.latest.queueLength : 0;
       const headline = !settings.enabled
         ? "一起听：已禁用"
         : session.lastError
           ? `一起听：${session.lastError}`
           : session.joined
-            ? `一起听：${session.isHost ? "房主" : "听众"} · 房间 ${settings.roomId} · ${members} 人 · ${describeMode(session.controlMode)}`
+            ? `一起听：${session.isHost ? "房主" : "听众"} · 房间 ${settings.roomId} · ${members} 人 · ${describeMode(session.controlMode)} · 队列 ${queued ?? 0} 首`
             : "一起听：连接中…";
       const nowPlaying = session.latest && session.latest.playback
         ? describe(session.latest.playback.track)
@@ -1229,14 +1340,22 @@ splayer.on("menuClick", async ({ menuId }) => {
 /** 启动：先干掉可能残留的旧状态，再拉起循环 */
 void (async () => {
   try {
-    // 房主令牌与上次的房间一起恢复，避免重启后丢房主位
-    const savedRoom = await splayer.storage.get("roomId");
-    const savedToken = await splayer.storage.get("hostToken");
     readSettings();
-    if (savedRoom === settings.roomId && typeof savedToken === "string") {
-      session.hostToken = savedToken;
-      debug("已恢复保存的房主令牌");
+
+    // 同一个房间的话，把上次的身份（clientId）和房主令牌恢复回来。
+    // 少了这一步，插件每次重载都会以新身份加入，旧记录还在，
+    // 房间里就会出现同一个人的两个成员。
+    const savedRoom = await splayer.storage.get("roomId");
+    if (savedRoom === settings.roomId) {
+      const savedClientId = await splayer.storage.get("clientId");
+      const savedToken = await splayer.storage.get("hostToken");
+      if (typeof savedClientId === "string") session.clientId = savedClientId;
+      if (typeof savedToken === "string") session.hostToken = savedToken;
+      if (typeof savedClientId === "string" || typeof savedToken === "string") {
+        debug("已恢复上次的房间身份");
+      }
     }
+
     await start();
   } catch (error) {
     log.error("[一起听] 启动失败：", (error && error.message) || String(error));

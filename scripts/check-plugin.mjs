@@ -88,6 +88,12 @@ const HOST_TRACK = {
 
 const LOCAL_TRACK = { id: "local-1", source: "local", title: "本地的一首歌", artists: [], duration: 100000 };
 
+/** 房间队列里预置的两首，用来验证「把队列推给本机播放列表」 */
+const QUEUED_TRACKS = [
+  { id: "q-1", source: "netease", title: "队列第一首", artists: [{ name: "甲" }], duration: 200000 },
+  { id: "q-2", source: "netease", title: "队列第二首", artists: [{ name: "乙" }], duration: 210000 },
+];
+
 const roomSnapshot = (playback = null, driverClientId = null) => ({
   roomId: ROOM,
   name: ROOM,
@@ -214,6 +220,21 @@ const makeSplayer = (state) => ({
           body: { ok: true, accepted: true, mode: body.mode, version: state.version, serverTime: Date.now() },
         };
       }
+      if (url.endsWith("/queue")) {
+        return {
+          status: 200,
+          headers: {},
+          body: {
+            ok: true,
+            queueVersion: 3,
+            queue: [
+              { id: "q-1", track: QUEUED_TRACKS[0], addedBy: "host-1", addedAt: Date.now(), insertNext: false },
+              { id: "q-2", track: QUEUED_TRACKS[1], addedBy: "guest-1", addedAt: Date.now(), insertNext: false },
+            ],
+            serverTime: Date.now(),
+          },
+        };
+      }
       if (url.endsWith("/poll")) {
         // 挂住，等测试主动投递
         return new Promise((resolve) => {
@@ -271,7 +292,7 @@ const sandboxGlobals = {
 };
 
 /** 用给定设置起一个全新的插件实例（旧实例的循环留在它自己的 state 里，互不干扰） */
-const boot = async (overrides, role) => {
+const boot = async (overrides, role, preset = {}) => {
   for (const key of Object.keys(settings)) delete settings[key];
   Object.assign(settings, {
     serverUrl: SERVER,
@@ -286,6 +307,8 @@ const boot = async (overrides, role) => {
 
   state = makeState();
   state.role = role;
+  // 预置 storage：模拟「插件上次已经把身份存下来了」
+  for (const [key, value] of Object.entries(preset)) state.storage.set(key, value);
 
   const context = vm.createContext({ ...sandboxGlobals, splayer: makeSplayer(state) });
   vm.runInContext(source, context, { filename: "splayer-listen-together.js" });
@@ -581,6 +604,52 @@ check("「打开房间页面」指向房间 URL", openResult?.openUrl, `${SERVER
 
 const copyResult = await state.handlers.menuClick({ menuId: "copy-room", track: HOST_TRACK });
 ok("「复制房间链接」返回了文本", typeof copyResult?.copyText === "string");
+
+/* ── 9. 身份复用 ───────────────────────────────────────────────────────────── */
+
+console.log("\n[9] 身份复用：插件重载不会把自己变成第二个成员");
+
+await boot({}, "host");
+ok(
+  "第一次加入没带 clientId（服务端分配一个）",
+  !state.requests.find((r) => r.url.endsWith("/join"))?.body?.clientId,
+);
+ok("加入后把 clientId 存了下来", typeof state.storage.get("clientId") === "string");
+check("也把房间 ID 存了下来", state.storage.get("roomId"), ROOM);
+
+// 重载：storage 里留着上次的身份，这次应当带着它加入。
+// 不然服务端会当成一个新成员，旧记录还在，同一个人就显示成了两个。
+await boot({}, "host", { roomId: ROOM, clientId: "reused-client-1", hostToken: "reused-token-1" });
+const reuseJoin = state.requests.find((r) => r.url.endsWith("/join"));
+check("重载后带着上次的 clientId 加入", reuseJoin?.body?.clientId, "reused-client-1");
+check("也带着上次的房主令牌", reuseJoin?.body?.hostToken, "reused-token-1");
+
+/* ── 10. 房间队列同步 ─────────────────────────────────────────────────────── */
+
+console.log("\n[10] 房间队列：把队列推给本机播放列表");
+
+await boot({ syncQueue: true, enableMcpControl: true, mcpKey: "k".repeat(32) }, "host");
+await settle(700);
+
+const queueCall = state.requests.find(
+  (r) => r.body?.method === "tools/call" && r.body?.params?.name === "add_to_queue",
+);
+ok("调用了 MCP 的 add_to_queue", Boolean(queueCall));
+check(
+  "推的是房间队列里的曲目",
+  (queueCall?.body?.params?.arguments?.tracks || []).map((t) => t.id),
+  ["q-1", "q-2"],
+);
+check("追加到队尾", queueCall?.body?.params?.arguments?.position, "end");
+
+// 没开这个开关时，不该去动本机的播放列表
+await boot({ enableMcpControl: true, mcpKey: "k".repeat(32) }, "host");
+await settle(700);
+check(
+  "没开「同步房间队列」时不动本机播放列表",
+  state.requests.filter((r) => r.body?.params?.name === "add_to_queue").length,
+  0,
+);
 
 console.log(`\n${failures === 0 ? "全部通过 ✓" : `${failures} 项未通过 ✗`}\n`);
 process.exit(failures === 0 ? 0 : 1);

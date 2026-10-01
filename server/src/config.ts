@@ -40,6 +40,10 @@ export const config = {
   maxPollWaitMs: 30_000,
   /** 房间内成员数上限，防滥用 */
   maxMembers: 32,
+  /** 共享队列长度上限；超出后从队尾丢（保近的） */
+  maxQueue: 200,
+  /** 一次最多加几首（和 SPlayer MCP 的 add_to_queue 上限对齐） */
+  maxQueueAdd: 50,
 } as const;
 
 /** 服务端版本，取 package.json；插件有自己的独立版本号（写在脚本头部） */

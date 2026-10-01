@@ -260,10 +260,74 @@
     renderNowPlaying();
     renderMembers();
     $("serverTime").textContent = new Date(payload.serverTime).toLocaleTimeString("zh-CN");
+
+    // 队列内容不在快照里，版本变了才单独去拉
+    if (typeof payload.queueVersion === "number" && payload.queueVersion !== queueVersion) {
+      void refreshQueue();
+    }
   };
 
-  const openStream = () => {
-    if (source) source.close();
+  /* ====================================================================== *
+   *  房间队列
+   *
+   *  队列内容不进快照（可能很长），快照里只给 queueVersion；
+   *  版本一变就单独拉一次整条队列。
+   * ====================================================================== */
+
+  /** 已渲染的队列版本；-1 表示还没拉过 */
+  let queueVersion = -1;
+
+  const renderQueue = (queue) => {
+    const list = Array.isArray(queue) ? queue : [];
+    const names = new Map((room && room.members ? room.members : []).map((m) => [m.clientId, m.name]));
+    $("queueCount").textContent = list.length ? `${list.length} 首` : "";
+    $("queue").classList.toggle("scrollable", list.length > 8);
+
+    if (list.length === 0) {
+      $("queue").innerHTML =
+        '<li class="queue-row"><span class="room-sub idle">队列是空的。在 SPlayer 里用插件菜单就能把歌加进来。</span></li>';
+      return;
+    }
+
+    $("queue").innerHTML = list
+      .map((entry, index) => {
+        const track = entry.track || {};
+        const cover = safeImageUrl(track.cover || (track.album && track.album.cover));
+        const artists = (track.artists || []).map((artist) => artist.name).join(" / ");
+        const who = names.get(entry.addedBy);
+        return `
+          <li class="queue-row">
+            <span class="queue-index">${index + 1}</span>
+            <span class="room-art"${cover ? ` data-cover="${esc(cover)}"` : ""}>${cover ? "" : "♪"}</span>
+            <span class="room-body">
+              <span class="room-title">${esc(track.title || "未知曲目")}</span>
+              <span class="room-sub">${esc(artists)}</span>
+            </span>
+            ${who ? `<span class="queue-who">${esc(who)} 点的</span>` : ""}
+          </li>`;
+      })
+      .join("");
+
+    for (const node of document.querySelectorAll("#queue .room-art[data-cover]")) {
+      node.style.backgroundImage = `url("${node.dataset.cover}")`;
+    }
+  };
+
+  const refreshQueue = async () => {
+    try {
+      const response = await fetch(`/api/room/${encodeURIComponent(ROOM_ID)}/queue`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      queueVersion = payload.queueVersion;
+      renderQueue(payload.queue);
+    } catch {
+      /* 拉不到就先不显示，下次队列变化会再试 */
+    }
+  };
+
+  const openStream = () => {    if (source) source.close();
     source = new EventSource(keyed(`/api/room/${encodeURIComponent(ROOM_ID)}/events`));
 
     source.onopen = () => {
@@ -482,9 +546,10 @@
    * ====================================================================== */
 
   if (IS_INDEX) {
-    // 房间列表模式：把房间详情那两块收起来
+    // 房间列表模式：把房间详情那几块收起来
     $("now").hidden = true;
     $("membersCard").hidden = true;
+    $("queueCard").hidden = true;
     $("roomsCard").hidden = false;
     $("copyLink").hidden = true;
     $("roomName").hidden = true;

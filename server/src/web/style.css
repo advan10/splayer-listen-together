@@ -391,6 +391,41 @@ body {
 
 .arrow { color: var(--faint); opacity: 0.45; transition: opacity 0.18s, transform 0.18s; }
 
+/* ── 房间队列 ─────────────────────────────────────────────────────────────── */
+
+.queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.queue-index {
+  width: 20px;
+  flex: 0 0 20px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-row .room-art { width: 34px; height: 34px; flex-basis: 34px; border-radius: 8px; font-size: 15px; }
+.queue-row .room-title { font-size: 14px; font-weight: 500; }
+.queue-row .room-sub { font-size: 12px; }
+
+.queue-who {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* 队列长了就滚动，别把页面撑得老长 */
+.queue.scrollable { max-height: 320px; overflow-y: auto; }
+
 /* ── 页脚 ─────────────────────────────────────────────────────────────────── */
 
 footer {

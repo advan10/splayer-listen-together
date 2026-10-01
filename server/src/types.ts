@@ -114,6 +114,10 @@ export interface RoomSnapshot {
   driverClientId: string | null;
   members: MemberInfo[];
   serverTime: number;
+  /** 队列版本，队列一变就 +1；客户端据此决定要不要重新拉队列 */
+  queueVersion: number;
+  /** 队列长度。完整的队列内容不塞进快照里（可能很大），另走 /queue 拿 */
+  queueLength: number;
 }
 
 /** 房间列表里的一行；只带首页展示够用的信息，不含完整 Track */
@@ -133,6 +137,50 @@ export interface RoomSummary {
   } | null;
   /** 最后一次上报的时刻（毫秒），没人在播时为 null */
   updatedAt: number | null;
+}
+
+/**
+ * 房间共享队列里的一项。
+ *
+ * 队列放在服务端是为了让大家的「下一首」是同一首 —— 各人本地队列互相独立时，
+ * 一首放完每个人会各自走向自己的下一首，直接乱掉。
+ */
+export interface QueueEntry {
+  /** 房间内唯一序号；删除与去重都靠它 */
+  id: string;
+  /** 整条 Track 原样带着，客户端要拿它调本机 MCP 的 add_to_queue */
+  track: PluginTrack;
+  /** 加进来的人 */
+  addedBy: string;
+  addedAt: number;
+  /** 入队时要求「紧接着放」；客户端据此决定用 next 还是 end 推给本机播放队列 */
+  insertNext: boolean;
+}
+
+/** 插入位置：next 插到队首（紧接着当前播放），end 追加到队尾 */
+export type QueuePosition = "next" | "end";
+
+/** 队列请求的动作 */
+export interface QueueRequest {
+  clientId: string;
+  hostToken?: string;
+  action: "add" | "remove" | "clear";
+  /** action = add 时必填 */
+  tracks?: PluginTrack[];
+  /** action = add 时的插入位置，默认 end */
+  position?: QueuePosition;
+  /** action = remove 时必填 */
+  entryId?: string;
+}
+
+/** 队列接口的响应；每次都会把整条队列带回去，省一次往返 */
+export interface QueueResponse {
+  ok: boolean;
+  /** 这次动作影响了几项（取队列时为 undefined） */
+  changed?: number;
+  queueVersion: number;
+  queue: QueueEntry[];
+  serverTime: number;
 }
 
 /* ================= 请求 / 响应 ================= */
