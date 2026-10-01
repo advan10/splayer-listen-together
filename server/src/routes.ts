@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { config, VERSION } from "./config.ts";
+import { t } from "./i18n.ts";
 import { RoomError, roomStore } from "./rooms.ts";
 import type { JoinRequest, PluginTrack, PollRequest, PublishRequest, QueueRequest } from "./types.ts";
 import { extractServerKey, isValidRoomId, readJson, safeEqual, sendEmpty, sendJson } from "./util.ts";
@@ -30,7 +31,7 @@ export const handleApi = async (
   // 代价是它对外可见，所以下面会把房间数隐掉。
   const isHealth = pathname === "/api/health";
   if (config.serverKey && !isHealth && !safeEqual(extractServerKey(req, url), config.serverKey)) {
-    fail(res, 401, "服务端密钥缺失或不正确", "SERVER_KEY_REQUIRED");
+    fail(res, 401, t("api.serverKeyRequired"), "SERVER_KEY_REQUIRED");
     return true;
   }
 
@@ -55,7 +56,7 @@ export const handleApi = async (
 
     const match = /^\/api\/room\/([^/]+)(?:\/(join|poll|publish|leave|mode|queue))?$/.exec(pathname);
     if (!match) {
-      fail(res, 404, "未知接口", "NOT_FOUND");
+      fail(res, 404, t("api.notFound"), "NOT_FOUND");
       return true;
     }
 
@@ -63,19 +64,19 @@ export const handleApi = async (
     const action = match[2];
 
     if (!isValidRoomId(roomId)) {
-      fail(res, 400, "房间 ID 只能包含字母、数字、下划线和连字符（1-64 位）", "BAD_ROOM_ID");
+      fail(res, 400, t("api.badRoomId"), "BAD_ROOM_ID");
       return true;
     }
 
     // GET /api/room/:id —— 取一次快照
     if (!action) {
       if (req.method !== "GET") {
-        fail(res, 405, "方法不允许", "METHOD_NOT_ALLOWED");
+        fail(res, 405, t("api.methodNotAllowed"), "METHOD_NOT_ALLOWED");
         return true;
       }
       const snapshot = roomStore.get(roomId);
       if (!snapshot) {
-        fail(res, 404, "房间不存在", "ROOM_NOT_FOUND");
+        fail(res, 404, t("api.roomNotFound"), "ROOM_NOT_FOUND");
         return true;
       }
       sendJson(res, 200, { ok: true, room: snapshot });
@@ -86,7 +87,7 @@ export const handleApi = async (
     if (action === "queue" && req.method === "GET") {
       const result = roomStore.queueOf(roomId);
       if (!result) {
-        fail(res, 404, "房间不存在", "ROOM_NOT_FOUND");
+        fail(res, 404, t("api.roomNotFound"), "ROOM_NOT_FOUND");
         return true;
       }
       sendJson(res, 200, {
@@ -99,7 +100,7 @@ export const handleApi = async (
     }
 
     if (req.method !== "POST") {
-      fail(res, 405, "方法不允许", "METHOD_NOT_ALLOWED");
+      fail(res, 405, t("api.methodNotAllowed"), "METHOD_NOT_ALLOWED");
       return true;
     }
 
@@ -134,7 +135,7 @@ export const handleApi = async (
     if (action === "publish") {
       const input = body as unknown as PublishRequest;
       if (typeof input.clientId !== "string" || !input.playback) {
-        fail(res, 400, "缺少 clientId 或 playback", "BAD_REQUEST");
+        fail(res, 400, t("api.missingClientIdPlayback"), "BAD_REQUEST");
         return true;
       }
       const result = roomStore.publish(roomId, {
@@ -159,7 +160,7 @@ export const handleApi = async (
     if (action === "poll") {
       const input = body as unknown as PollRequest;
       if (typeof input.clientId !== "string") {
-        fail(res, 400, "缺少 clientId", "BAD_REQUEST");
+        fail(res, 400, t("api.missingClientId"), "BAD_REQUEST");
         return true;
       }
       // 长轮询：期间客户端断开就把挂起项收掉，别让它等到超时
@@ -182,7 +183,7 @@ export const handleApi = async (
     if (action === "mode") {
       const input = body;
       if (typeof input.clientId !== "string" || (input.mode !== "host" && input.mode !== "all")) {
-        fail(res, 400, "缺少 clientId，或 mode 不是 host/all", "BAD_REQUEST");
+        fail(res, 400, t("api.missingClientIdMode"), "BAD_REQUEST");
         return true;
       }
       const result = roomStore.setMode(roomId, {
@@ -204,7 +205,7 @@ export const handleApi = async (
     if (action === "queue") {
       const input = body as unknown as QueueRequest;
       if (typeof input.clientId !== "string") {
-        fail(res, 400, "缺少 clientId", "BAD_REQUEST");
+        fail(res, 400, t("api.missingClientId"), "BAD_REQUEST");
         return true;
       }
 
@@ -222,7 +223,7 @@ export const handleApi = async (
       if (input.action === "add") {
         const tracks = Array.isArray(input.tracks) ? (input.tracks as PluginTrack[]) : [];
         if (tracks.length === 0) {
-          fail(res, 400, "没有要加入队列的曲目", "BAD_REQUEST");
+          fail(res, 400, t("api.noTracks"), "BAD_REQUEST");
           return true;
         }
         const result = roomStore.addToQueue(roomId, {
@@ -236,7 +237,7 @@ export const handleApi = async (
 
       if (input.action === "remove") {
         if (typeof input.entryId !== "string") {
-          fail(res, 400, "缺少 entryId", "BAD_REQUEST");
+          fail(res, 400, t("api.missingEntryId"), "BAD_REQUEST");
           return true;
         }
         const result = roomStore.removeFromQueue(roomId, {
@@ -257,13 +258,13 @@ export const handleApi = async (
         return true;
       }
 
-      fail(res, 400, "action 只能是 add / remove / clear", "BAD_REQUEST");
+      fail(res, 400, t("api.badQueueAction"), "BAD_REQUEST");
       return true;
     }
 
     if (action === "leave") {
       if (typeof body.clientId !== "string") {
-        fail(res, 400, "缺少 clientId", "BAD_REQUEST");
+        fail(res, 400, t("api.missingClientId"), "BAD_REQUEST");
         return true;
       }
       roomStore.leave(roomId, body.clientId);
@@ -279,15 +280,15 @@ export const handleApi = async (
       return true;
     }
     if (error instanceof Error && error.message === "invalid json") {
-      fail(res, 400, "请求体不是合法 JSON", "BAD_JSON");
+      fail(res, 400, t("api.badJson"), "BAD_JSON");
       return true;
     }
     if (error instanceof Error && error.message === "payload too large") {
-      fail(res, 413, "请求体过大", "PAYLOAD_TOO_LARGE");
+      fail(res, 413, t("api.payloadTooLarge"), "PAYLOAD_TOO_LARGE");
       return true;
     }
     console.error("[api] 未捕获错误:", error);
-    fail(res, 500, "服务端内部错误", "INTERNAL");
+    fail(res, 500, t("api.internal"), "INTERNAL");
     return true;
   }
 };

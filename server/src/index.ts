@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { config, VERSION } from "./config.ts";
+import { t } from "./i18n.ts";
 import { handleApi, handlePreflight } from "./routes.ts";
 import { roomStore } from "./rooms.ts";
 import { isValidRoomId, extractServerKey, safeEqual, sendJson, sendText } from "./util.ts";
@@ -90,12 +91,12 @@ const server = createServer((req, res) => {
       if (sse && req.method === "GET") {
         // 房间页是浏览器开的，EventSource 设不了请求头，所以这条用 ?key=
         if (config.serverKey && !safeEqual(extractServerKey(req, url), config.serverKey)) {
-          sendJson(res, 401, { ok: false, error: "服务端密钥缺失或不正确", code: "SERVER_KEY_REQUIRED" });
+          sendJson(res, 401, { ok: false, error: t("api.serverKeyRequired"), code: "SERVER_KEY_REQUIRED" });
           return;
         }
         const roomId = decodeURIComponent(sse[1] as string);
         if (!isValidRoomId(roomId)) {
-          sendJson(res, 400, { ok: false, error: "房间 ID 非法", code: "BAD_ROOM_ID" });
+          sendJson(res, 400, { ok: false, error: t("api.badRoomIdShort"), code: "BAD_ROOM_ID" });
           return;
         }
         handleSse(req, res, roomId);
@@ -118,7 +119,7 @@ const server = createServer((req, res) => {
 
       await serveStatic(res, url.pathname.slice(1));
     } catch (error) {
-      console.error("[server] 请求处理失败:", error);
+      console.error(t("log.requestFailed"), error);
       if (!res.writableEnded) sendText(res, 500, "Internal Server Error");
     }
   })();
@@ -134,21 +135,18 @@ sweeper.unref?.();
 
 server.listen(config.port, config.host, () => {
   const shown = config.host === "0.0.0.0" ? "127.0.0.1" : config.host;
-  console.log(`\n  一起听服务端 v${VERSION} 已启动`);
-  console.log(`  房间列表  http://${shown}:${config.port}/`);
-  console.log(`  房间页面  http://${shown}:${config.port}/room/<房间ID>`);
-  console.log(`  健康检查  http://${shown}:${config.port}/api/health`);
-  console.log(
-    config.serverKey
-      ? "  服务端密钥 已开启：插件要填对密钥才能连上"
-      : "  服务端密钥 未设置 —— 任何人都能创建房间，建议设一个 SERVER_KEY",
-  );
-  if (config.roomKey) console.log("  房间口令  已由 ROOM_KEY 环境变量设置");
+  const base = `http://${shown}:${config.port}`;
+  console.log(t("banner.started", { version: VERSION }));
+  console.log(t("banner.roomList", { base }));
+  console.log(t("banner.roomPage", { base }));
+  console.log(t("banner.health", { base }));
+  console.log(config.serverKey ? t("banner.keyOn") : t("banner.keyOff"));
+  if (config.roomKey) console.log(t("banner.roomKey"));
   console.log("");
 });
 
 const shutdown = (signal: string): void => {
-  console.log(`\n收到 ${signal}，正在关闭…`);
+  console.log(t("log.shutdown", { signal }));
   clearInterval(sweeper);
   server.close(() => process.exit(0));
   // 兜底：长轮询连接可能还挂着，10 秒没关干净就强退

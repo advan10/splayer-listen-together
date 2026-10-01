@@ -1,4 +1,5 @@
 import { config } from "./config.ts";
+import { t } from "./i18n.ts";
 import type {
   ControlMode,
   MemberInfo,
@@ -119,7 +120,7 @@ export class RoomStore {
     const expected = this.effectiveKey(room);
     if (!expected) return;
     if (typeof key !== "string" || key !== expected) {
-      throw new RoomError("房间口令不正确", "BAD_ROOM_KEY", 403);
+      throw new RoomError(t("room.badKey"), "BAD_ROOM_KEY", 403);
     }
   }
 
@@ -206,11 +207,11 @@ export class RoomStore {
 
     if (room.members.size >= config.maxMembers) {
       const existing = input.clientId ? room.members.get(input.clientId) : undefined;
-      if (!existing) throw new RoomError("房间人数已满", "ROOM_FULL", 409);
+      if (!existing) throw new RoomError(t("room.full"), "ROOM_FULL", 409);
     }
 
     const clientId = input.clientId?.trim() || randomHex(8);
-    const name = sanitizeName(input.name, `听众-${clientId.slice(0, 4)}`);
+    const name = sanitizeName(input.name, t("name.fallback", { id: clientId.slice(0, 4) }));
     const role: MemberRole | "auto" = input.role ?? "auto";
 
     // 房主判定：令牌有效 → 一定是房主；否则在「房主缺席」时按意愿接管
@@ -288,10 +289,10 @@ export class RoomStore {
     },
   ): { accepted: boolean; reason?: "host-only" | "stale-seq"; room: RoomSnapshot } {
     const room = this.rooms.get(roomId);
-    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    if (!room) throw new RoomError(t("room.notFound"), "ROOM_NOT_FOUND", 404);
 
     const member = room.members.get(input.clientId);
-    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    if (!member) throw new RoomError(t("room.notJoined"), "NOT_JOINED", 409);
 
     member.lastSeen = now();
 
@@ -336,10 +337,10 @@ export class RoomStore {
     input: { clientId: string; hostToken?: string; mode: ControlMode },
   ): { accepted: boolean; reason?: string; room: RoomSnapshot } {
     const room = this.rooms.get(roomId);
-    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    if (!room) throw new RoomError(t("room.notFound"), "ROOM_NOT_FOUND", 404);
 
     const member = room.members.get(input.clientId);
-    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    if (!member) throw new RoomError(t("room.notJoined"), "NOT_JOINED", 409);
     member.lastSeen = now();
 
     const tokenValid =
@@ -392,9 +393,9 @@ export class RoomStore {
     input: { clientId: string; tracks: PluginTrack[]; position?: QueuePosition },
   ): { added: number; room: RoomSnapshot } {
     const room = this.rooms.get(roomId);
-    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    if (!room) throw new RoomError(t("room.notFound"), "ROOM_NOT_FOUND", 404);
     const member = room.members.get(input.clientId);
-    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    if (!member) throw new RoomError(t("room.notJoined"), "NOT_JOINED", 409);
     member.lastSeen = now();
 
     // 同一首歌不重复入队，免得本地播放队列和服务端队列越差越远
@@ -432,13 +433,13 @@ export class RoomStore {
     input: { clientId: string; hostToken?: string; entryId: string },
   ): { removed: number; room: RoomSnapshot } {
     const room = this.rooms.get(roomId);
-    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    if (!room) throw new RoomError(t("room.notFound"), "ROOM_NOT_FOUND", 404);
     const member = room.members.get(input.clientId);
-    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    if (!member) throw new RoomError(t("room.notJoined"), "NOT_JOINED", 409);
     member.lastSeen = now();
 
     if (!this.mayControl(room, input.clientId, input.hostToken)) {
-      throw new RoomError("现在只有控制者能改队列", "NOT_ALLOWED", 403);
+      throw new RoomError(t("room.notAllowed"), "NOT_ALLOWED", 403);
     }
 
     const index = room.queue.findIndex((entry) => entry.id === input.entryId);
@@ -456,13 +457,13 @@ export class RoomStore {
     input: { clientId: string; hostToken?: string },
   ): { cleared: number; room: RoomSnapshot } {
     const room = this.rooms.get(roomId);
-    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    if (!room) throw new RoomError(t("room.notFound"), "ROOM_NOT_FOUND", 404);
     const member = room.members.get(input.clientId);
-    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    if (!member) throw new RoomError(t("room.notJoined"), "NOT_JOINED", 409);
     member.lastSeen = now();
 
     if (!this.mayControl(room, input.clientId, input.hostToken)) {
-      throw new RoomError("现在只有控制者能改队列", "NOT_ALLOWED", 403);
+      throw new RoomError(t("room.notAllowed"), "NOT_ALLOWED", 403);
     }
 
     const cleared = room.queue.length;
@@ -483,7 +484,7 @@ export class RoomStore {
     input: { clientId: string; name?: string; since?: number; wait?: number },
   ): Promise<{ changed: boolean; room: RoomSnapshot }> {
     const room = this.rooms.get(roomId);
-    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    if (!room) throw new RoomError(t("room.notFound"), "ROOM_NOT_FOUND", 404);
 
     // 顺手清一遍离线成员：控制者/房主掉线要尽快释放，别让房间卡在没人的状态
     if (this.prune(room)) this.bump(room);
@@ -493,7 +494,7 @@ export class RoomStore {
       // 宽容处理：会话丢了就当作新听众加入，不用让插件重走 join
       room.members.set(input.clientId, {
         clientId: input.clientId,
-        name: sanitizeName(input.name, `听众-${input.clientId.slice(0, 4)}`),
+        name: sanitizeName(input.name, t("name.fallback", { id: input.clientId.slice(0, 4) })),
         role: room.hostClientId === input.clientId ? "host" : "guest",
         joinedAt: now(),
         lastSeen: now(),

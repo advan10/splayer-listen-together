@@ -23,6 +23,192 @@
 
   const $ = (id) => document.getElementById(id);
 
+  /* ====================================================================== *
+   *  i18n：zh_cn / en_us
+   *
+   *  语言优先级：?lang= → localStorage → 浏览器语言 → zh_cn。
+   *  切换按钮在顶栏，即时生效（静态文案重写 + 动态视图重渲染）。
+   * ====================================================================== */
+
+  const LANG_STORAGE = "listen-together-lang";
+
+  const LOCALES = {
+    zh_cn: {
+      docTitleIndex: "一起听",
+      docTitleRoom: "一起听 · {room}",
+      docTitleTrack: "{title} · 一起听",
+      "gate.title": "需要服务端密钥",
+      "gate.desc": "服务端已开启访问密钥，填对才能看房间哦~",
+      "gate.placeholder": "服务端密钥",
+      "gate.enter": "进入",
+      "gate.keyWrong": "密钥不正确，请重新输入",
+      "gate.keyEmpty": "请填写密钥",
+      "brand.label": "一起听",
+      "back.title": "返回房间列表",
+      "copyLink.title": "复制房间链接",
+      "langToggle.title": "Switch to English",
+      "status.connecting": "连接中…",
+      "status.connected": "已连接",
+      "status.reconnecting": "连接断开，正在重连中…",
+      "status.unreachable": "无法连接至服务端",
+      "status.needKey": "需要密钥",
+      "now.empty": "还没有人在播放",
+      "now.unknownArtist": "未知艺人",
+      "now.unknownSource": "未知来源",
+      "now.playing": "播放中",
+      "now.paused": "已暂停",
+      "now.driverTag": "{name} 正在控制",
+      "badge.host": "房主",
+      "badge.listener": "听众",
+      "badge.controlling": "正在控制",
+      "name.listener": "听众",
+      "members.empty": "暂时没有人在房间里",
+      "mode.host": "电台",
+      "mode.all": "一起听",
+      "modeLine.host": "控制模式：电台 · 由房主修改播放列表",
+      "modeLine.all": "控制模式：一起听 · 所有人皆可修改播放列表",
+      "count.members": "{n} 人",
+      "count.queue": "{n} 首",
+      "count.rooms": "{n} 个",
+      "section.members": "房间成员",
+      "section.queue": "房间队列",
+      "section.rooms": "当前房间",
+      "queue.empty": "队列是空的。在 SPlayer 里使用插件菜单添加歌曲。",
+      "queue.unknownTrack": "未知曲目",
+      "queue.requestedBy": "{name} 点的",
+      "rooms.empty": "现在还没有房间。在 SPlayer 启用「一起听」插件开启房间。",
+      "rooms.pausedPrefix": "已暂停 · ",
+      "toast.copied": "链接已复制",
+      "toast.copyFailed": "复制失败，请手动复制地址栏",
+      "footer.credit": '一起听服务端 <span class="ver" data-server-version>—</span> · 由 <a href="https://github.com/SPlayer-Dev/SPlayer-Next" target="_blank" rel="noreferrer">SPlayer-Next</a> 控制插件上报 · <span id="serverTime">—</span>',
+      "log.eventParse": "无法解析事件",
+      "source.netease": "网易云",
+      "source.qqmusic": "QQ 音乐",
+      "source.kugou": "酷狗",
+      "source.local": "本地",
+      "source.streaming": "流媒体",
+    },
+    en_us: {
+      docTitleIndex: "Listen Together",
+      docTitleRoom: "Listen Together · {room}",
+      docTitleTrack: "{title} · Listen Together",
+      "gate.title": "Server key required",
+      "gate.desc": "This server requires an access key. Enter the correct key to view rooms.",
+      "gate.placeholder": "Server key",
+      "gate.enter": "Enter",
+      "gate.keyWrong": "Wrong key, please try again",
+      "gate.keyEmpty": "Please enter the key",
+      "brand.label": "Listen Together",
+      "back.title": "Back to room list",
+      "copyLink.title": "Copy room link",
+      "langToggle.title": "切换到中文",
+      "status.connecting": "Connecting…",
+      "status.connected": "Connected",
+      "status.reconnecting": "Connection lost, reconnecting…",
+      "status.unreachable": "Unable to connect to the server",
+      "status.needKey": "Key required",
+      "now.empty": "Nobody is playing yet",
+      "now.unknownArtist": "Unknown artist",
+      "now.unknownSource": "Unknown source",
+      "now.playing": "Playing",
+      "now.paused": "Paused",
+      "now.driverTag": "{name} is controlling",
+      "badge.host": "Host",
+      "badge.listener": "Listener",
+      "badge.controlling": "Controlling",
+      "name.listener": "Listener",
+      "members.empty": "Nobody in the room right now",
+      "mode.host": "Radio",
+      "mode.all": "Listen Together",
+      "modeLine.host": "Control mode: Radio · playlist is managed by the host",
+      "modeLine.all": "Control mode: Listen Together · anyone can modify the playlist",
+      "count.members": "{n} people",
+      "count.queue": "{n} tracks",
+      "count.rooms": "{n} rooms",
+      "section.members": "Members",
+      "section.queue": "Queue",
+      "section.rooms": "Rooms",
+      "queue.empty": "The queue is empty. Use the plugin menu in SPlayer to add tracks.",
+      "queue.unknownTrack": "Unknown track",
+      "queue.requestedBy": "added by {name}",
+      "rooms.empty": "No rooms yet. Enable the Listen Together plugin in SPlayer to start a room.",
+      "rooms.pausedPrefix": "Paused · ",
+      "toast.copied": "Link copied",
+      "toast.copyFailed": "Copy failed — please copy the address from the address bar",
+      "footer.credit": 'Listen Together server <span class="ver" data-server-version>—</span> · reported by the <a href="https://github.com/SPlayer-Dev/SPlayer-Next" target="_blank" rel="noreferrer">SPlayer-Next</a> plugin · <span id="serverTime">—</span>',
+      "log.eventParse": "Failed to parse event",
+      "source.netease": "NetEase",
+      "source.qqmusic": "QQ Music",
+      "source.kugou": "Kugou",
+      "source.local": "Local",
+      "source.streaming": "Streaming",
+    },
+  };
+
+  const normalizeLang = (value) => {
+    const text = String(value || "").trim().toLowerCase();
+    if (text.startsWith("en")) return "en_us";
+    if (text.startsWith("zh")) return "zh_cn";
+    return "";
+  };
+
+  let lang =
+    normalizeLang(new URLSearchParams(location.search).get("lang")) ||
+    normalizeLang(localStorage.getItem(LANG_STORAGE)) ||
+    normalizeLang(navigator.language) ||
+    "zh_cn";
+
+  /** 取当前语言的文案；`{name}` 占位符用 params 替换 */
+  const t = (key, params) => {
+    let text = LOCALES[lang][key] ?? LOCALES.zh_cn[key] ?? key;
+    if (params) {
+      for (const [name, value] of Object.entries(params)) {
+        text = text.replaceAll(`{${name}}`, String(value));
+      }
+    }
+    return text;
+  };
+
+  const localeTag = () => (lang === "en_us" ? "en-US" : "zh-CN");
+
+  /** 把当前语言写到所有带 data-i18n* 的静态节点上 */
+  const applyI18n = () => {
+    document.documentElement.lang = localeTag();
+    for (const node of document.querySelectorAll("[data-i18n]")) {
+      node.textContent = t(node.dataset.i18n);
+    }
+    for (const node of document.querySelectorAll("[data-i18n-html]")) {
+      node.innerHTML = t(node.dataset.i18nHtml);
+    }
+    for (const node of document.querySelectorAll("[data-i18n-placeholder]")) {
+      node.placeholder = t(node.dataset.i18nPlaceholder);
+    }
+    for (const node of document.querySelectorAll("[data-i18n-title]")) {
+      node.title = t(node.dataset.i18nTitle);
+    }
+    for (const node of document.querySelectorAll("[data-i18n-aria]")) {
+      node.setAttribute("aria-label", t(node.dataset.i18nAria));
+    }
+    const toggle = $("langToggle");
+    toggle.textContent = lang === "zh_cn" ? "EN" : "中";
+    toggle.title = t("langToggle.title");
+  };
+
+  /** 切换语言后按当前模式重渲染动态内容 */
+  const rerenderDynamic = () => {
+    if (IS_INDEX) {
+      if (lastRooms.length) renderRooms(lastRooms);
+      else $("roomsCount").textContent = "";
+    } else {
+      renderNowPlaying();
+      renderMembers();
+      renderQueue(lastQueue);
+    }
+    if (IS_INDEX) document.title = t("docTitleIndex");
+    else if (view && view.track) document.title = t("docTitleTrack", { title: view.track.title });
+    else document.title = t("docTitleRoom", { room: ROOM_ID });
+  };
+
   /** 最近一次房间快照 */
   let room = null;
   /** 当前曲目的本地投影：{ track, playing, positionAtSync, localSyncedAt } */
@@ -79,14 +265,14 @@
    * 命令式的「你可以调」——那是配置项的口吻。
    */
   const modeLabelOf = (room) =>
-    room && room.controlMode === "all" ? "大家一起控制" : "房主控制";
+    room && room.controlMode === "all" ? t("mode.all") : t("mode.host");
 
-  const SOURCE_LABELS = {
-    netease: "网易云",
-    qqmusic: "QQ 音乐",
-    kugou: "酷狗",
-    local: "本地",
-    streaming: "流媒体",
+  const SOURCE_LABEL_KEYS = {
+    netease: "source.netease",
+    qqmusic: "source.qqmusic",
+    kugou: "source.kugou",
+    local: "source.local",
+    streaming: "source.streaming",
   };
 
   let toastTimer = null;
@@ -145,27 +331,27 @@
       container.innerHTML = `
         <div class="empty">
           <div class="glyph" aria-hidden="true">♪</div>
-          <div class="hint">还没有人在播放</div>
+          <div class="hint">${esc(t("now.empty"))}</div>
         </div>`;
       setBackdrop("");
       return;
     }
 
-    const artists = (track.artists || []).map((artist) => artist.name).join(" / ") || "未知艺人";
+    const artists = (track.artists || []).map((artist) => artist.name).join(" / ") || t("now.unknownArtist");
     const cover = safeImageUrl(track.cover || (track.album && track.album.cover));
     const modeLabel = modeLabelOf(room);
     const driver = room && (room.members || []).find((m) => m.clientId === room.driverClientId);
     const playing = view.playing;
 
     const tags = [
-      `<span class="tag">${esc(SOURCE_LABELS[track.source] || track.source || "未知来源")}</span>`,
+      `<span class="tag">${esc(SOURCE_LABEL_KEYS[track.source] ? t(SOURCE_LABEL_KEYS[track.source]) : track.source || t("now.unknownSource"))}</span>`,
       playing
-        ? `<span class="tag live"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>播放中</span>`
-        : `<span class="tag">已暂停</span>`,
-      `<span class="tag">${modeLabel}</span>`,
+        ? `<span class="tag live"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>${esc(t("now.playing"))}</span>`
+        : `<span class="tag">${esc(t("now.paused"))}</span>`,
+      `<span class="tag">${esc(modeLabel)}</span>`,
     ];
     if (driver && room.controlMode === "all") {
-      tags.push(`<span class="tag accent">${esc(driver.name)} 正在控制</span>`);
+      tags.push(`<span class="tag accent">${esc(t("now.driverTag", { name: driver.name }))}</span>`);
     }
 
     container.className = `card now${playing ? "" : " paused"}`;
@@ -192,7 +378,7 @@
     if (coverNode && cover) coverNode.style.backgroundImage = `url("${cover}")`;
     setBackdrop(cover);
 
-    document.title = `${track.title} · 一起听`;
+    document.title = t("docTitleTrack", { title: track.title });
     tick();
   };
 
@@ -209,19 +395,19 @@
   const renderMembers = () => {
     if (!room) return;
     const members = room.members || [];
-    $("memberCount").textContent = members.length ? `${members.length} 人` : "";
+    $("memberCount").textContent = members.length ? t("count.members", { n: members.length }) : "";
 
     $("members").innerHTML = members.length
       ? members
           .map((member) => {
             const isHost = member.clientId === room.hostClientId;
             const isDriver = room.controlMode === "all" && member.clientId === room.driverClientId;
-            const name = member.name || "听众";
+            const name = member.name || t("name.listener");
             const badges = [
-              `<span class="badge ${isHost ? "host" : ""}">${isHost ? "房主" : "听众"}</span>`,
+              `<span class="badge ${isHost ? "host" : ""}">${esc(isHost ? t("badge.host") : t("badge.listener"))}</span>`,
             ];
-            // 「大家一起控制」时才需要标出谁在控制；房主控制模式下房主就是控制者，标了是废话
-            if (isDriver) badges.push('<span class="badge host">正在控制</span>');
+            // 「一起听模式」时才需要标出谁在控制；电台模式下房主就是控制者，标了是废话
+            if (isDriver) badges.push(`<span class="badge host">${esc(t("badge.controlling"))}</span>`);
             return `
               <li class="member">
                 <span class="avatar" style="background:${avatarColor(name)}" aria-hidden="true">${esc(name.slice(0, 1))}</span>
@@ -230,12 +416,9 @@
               </li>`;
           })
           .join("")
-      : '<li class="member"><span class="name" style="color:var(--faint)">暂时没有人在房间里</span></li>';
+      : `<li class="member"><span class="name" style="color:var(--faint)">${esc(t("members.empty"))}</span></li>`;
 
-    $("modeLine").textContent =
-      room.controlMode === "all"
-        ? `控制模式：${modeLabelOf(room)} · 谁最后操作，谁就接管`
-        : `控制模式：${modeLabelOf(room)}`;
+    $("modeLine").textContent = room.controlMode === "all" ? t("modeLine.all") : t("modeLine.host");
   };
 
   const applyRoom = (payload) => {
@@ -259,7 +442,7 @@
 
     renderNowPlaying();
     renderMembers();
-    $("serverTime").textContent = new Date(payload.serverTime).toLocaleTimeString("zh-CN");
+    $("serverTime").textContent = new Date(payload.serverTime).toLocaleTimeString(localeTag());
 
     // 队列内容不在快照里，版本变了才单独去拉
     if (typeof payload.queueVersion === "number" && payload.queueVersion !== queueVersion) {
@@ -276,16 +459,19 @@
 
   /** 已渲染的队列版本；-1 表示还没拉过 */
   let queueVersion = -1;
+  /** 最近一次拉到的队列，切换语言时用它重渲染 */
+  let lastQueue = [];
 
   const renderQueue = (queue) => {
     const list = Array.isArray(queue) ? queue : [];
+    lastQueue = list;
     const names = new Map((room && room.members ? room.members : []).map((m) => [m.clientId, m.name]));
-    $("queueCount").textContent = list.length ? `${list.length} 首` : "";
+    $("queueCount").textContent = list.length ? t("count.queue", { n: list.length }) : "";
     $("queue").classList.toggle("scrollable", list.length > 8);
 
     if (list.length === 0) {
       $("queue").innerHTML =
-        '<li class="queue-row"><span class="room-sub idle">队列是空的。在 SPlayer 里用插件菜单就能把歌加进来。</span></li>';
+        `<li class="queue-row"><span class="room-sub idle">${esc(t("queue.empty"))}</span></li>`;
       return;
     }
 
@@ -300,10 +486,10 @@
             <span class="queue-index">${index + 1}</span>
             <span class="room-art"${cover ? ` data-cover="${esc(cover)}"` : ""}>${cover ? "" : "♪"}</span>
             <span class="room-body">
-              <span class="room-title">${esc(track.title || "未知曲目")}</span>
+              <span class="room-title">${esc(track.title || t("queue.unknownTrack"))}</span>
               <span class="room-sub">${esc(artists)}</span>
             </span>
-            ${who ? `<span class="queue-who">${esc(who)} 点的</span>` : ""}
+            ${who ? `<span class="queue-who">${esc(t("queue.requestedBy", { name: who }))}</span>` : ""}
           </li>`;
       })
       .join("");
@@ -333,18 +519,18 @@
 
     source.onopen = () => {
       $("dot").className = "dot on";
-      $("statusText").textContent = "已连接";
+      $("statusText").textContent = t("status.connected");
     };
 
     source.onerror = () => {
       $("dot").className = "dot off";
-      $("statusText").textContent = "连接断开，重连中…";
+      $("statusText").textContent = t("status.reconnecting");
       // 可能是密钥被改掉了。别每次报错都去问服务端，间隔一下
       if (Date.now() - lastProbeAt < 5_000) return;
       void probe().then((result) => {
         if (result.status === 401) {
           source.close();
-          showGate("密钥不对，请重新输入");
+          showGate(t("gate.keyWrong"));
         }
       });
     };
@@ -354,7 +540,7 @@
         const payload = JSON.parse(event.data);
         applyRoom(payload.room);
       } catch (error) {
-        console.warn("无法解析事件", error);
+        console.warn(t("log.eventParse"), error);
       }
     };
   };
@@ -363,13 +549,17 @@
    *  房间列表（根路径）
    * ====================================================================== */
 
+  /** 最近一次拉到的房间列表，切换语言时用它重渲染 */
+  let lastRooms = [];
+
   const renderRooms = (list) => {
-    $("roomsCount").textContent = list.length ? `${list.length} 个` : "";
+    lastRooms = list;
+    $("roomsCount").textContent = list.length ? t("count.rooms", { n: list.length }) : "";
 
     if (list.length === 0) {
       $("rooms").innerHTML = `
         <li class="room-row">
-          <span class="room-sub idle">现在还没有房间。在 SPlayer 里启用「一起听」插件之后，房间就会出现在这里。</span>
+          <span class="room-sub idle">${esc(t("rooms.empty"))}</span>
         </li>`;
       return;
     }
@@ -381,8 +571,8 @@
         const cover = now ? safeImageUrl(now.cover) : "";
         const artists = now && now.artists.length ? ` — ${now.artists.join(" / ")}` : "";
         const subtitle = now
-          ? `${item.playing ? "" : "已暂停 · "}${now.title}${artists}`
-          : "还没有人在播放";
+          ? `${item.playing ? "" : t("rooms.pausedPrefix")}${now.title}${artists}`
+          : t("now.empty");
         const modeLabel = modeLabelOf(item);
 
         return `
@@ -394,8 +584,8 @@
                 <span class="room-sub${now ? "" : " idle"}">${esc(subtitle)}</span>
               </span>
               <span class="badges">
-                <span class="badge">${item.members} 人</span>
-                <span class="badge">${modeLabel}</span>
+                <span class="badge">${t("count.members", { n: item.members })}</span>
+                <span class="badge">${esc(modeLabel)}</span>
               </span>
               <span class="arrow" aria-hidden="true">›</span>
             </a>
@@ -414,7 +604,7 @@
       const response = await fetch(keyed("/api/rooms"), { headers: authHeaders() });
       if (response.status === 401) {
         stopRoomList();
-        showGate("密钥不对，请重新输入");
+        showGate(t("gate.keyWrong"));
         return;
       }
       if (!response.ok) return;
@@ -428,11 +618,11 @@
       });
       renderRooms(list);
       $("dot").className = "dot on";
-      $("statusText").textContent = "已连接";
-      $("serverTime").textContent = new Date().toLocaleTimeString("zh-CN");
+      $("statusText").textContent = t("status.connected");
+      $("serverTime").textContent = new Date().toLocaleTimeString(localeTag());
     } catch {
       $("dot").className = "dot off";
-      $("statusText").textContent = "连不上服务端";
+      $("statusText").textContent = t("status.unreachable");
     }
   };
 
@@ -480,13 +670,13 @@
 
     if (result.status === 401) {
       $("dot").className = "dot off";
-      $("statusText").textContent = "需要密钥";
-      showGate(serverKey ? "密钥不对，请重新输入" : "");
+      $("statusText").textContent = t("status.needKey");
+      showGate(serverKey ? t("gate.keyWrong") : "");
       return;
     }
     if (result.status === 0) {
       $("dot").className = "dot off";
-      $("statusText").textContent = "连不上服务端";
+      $("statusText").textContent = t("status.unreachable");
       return;
     }
 
@@ -509,7 +699,7 @@
   $("gateButton").addEventListener("click", () => {
     const value = $("gateInput").value.trim();
     if (!value) {
-      $("gateError").textContent = "请填写密钥";
+      $("gateError").textContent = t("gate.keyEmpty");
       return;
     }
     serverKey = value;
@@ -526,7 +716,7 @@
     const url = `${location.origin}${location.pathname}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast("链接已复制");
+      toast(t("toast.copied"));
     } catch {
       // 非 https 或没给剪贴板权限时退回到老办法
       const field = document.createElement("textarea");
@@ -535,7 +725,7 @@
       field.select();
       const copied = document.execCommand("copy");
       field.remove();
-      toast(copied ? "链接已复制" : "复制失败，请手动复制地址栏");
+      toast(copied ? t("toast.copied") : t("toast.copyFailed"));
     }
     const button = $("copyLink");
     button.classList.add("done");
@@ -567,6 +757,18 @@
     }
   };
 
+  applyI18n();
+
+  /** 顶栏语言切换：zh_cn ↔ en_us，记忆到 localStorage，即时生效 */
+  $("langToggle").addEventListener("click", () => {
+    lang = lang === "zh_cn" ? "en_us" : "zh_cn";
+    localStorage.setItem(LANG_STORAGE, lang);
+    applyI18n();
+    rerenderDynamic();
+    // 页脚节点被 applyI18n 重建过，版本号要重新填
+    void loadVersion();
+  });
+
   // 版本号先显示出来：它不依赖密钥，闸门还没过也该看得见
   void loadVersion();
 
@@ -579,13 +781,13 @@
     $("copyLink").hidden = true;
     $("roomName").hidden = true;
     $("modeLine").hidden = true;
-    document.title = "一起听";
+    document.title = t("docTitleIndex");
     void connect();
   } else {
     $("roomsCard").hidden = true;
     $("backHome").hidden = false;
     $("roomName").textContent = ROOM_ID;
-    document.title = `一起听 · ${ROOM_ID}`;
+    document.title = t("docTitleRoom", { room: ROOM_ID });
     void connect();
   }
 

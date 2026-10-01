@@ -17,16 +17,18 @@
     <!-- 服务端设了密钥时挡在门口的一层 -->
     <div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
       <div class="card">
-        <h3 id="gateTitle">需要服务端密钥</h3>
-        <p>这台服务端开启了访问密钥，填对才能看房间。</p>
+        <h3 id="gateTitle" data-i18n="gate.title">需要服务端密钥</h3>
+        <p data-i18n="gate.desc">这台服务端开启了访问密钥，填对才能看房间。</p>
         <input
           id="gateInput"
           type="password"
           placeholder="服务端密钥"
+          data-i18n-placeholder="gate.placeholder"
           autocomplete="current-password"
           aria-label="服务端密钥"
+          data-i18n-aria="gate.placeholder"
         />
-        <button id="gateButton">进入</button>
+        <button id="gateButton" data-i18n="gate.enter">进入</button>
         <div class="error" id="gateError" role="alert"></div>
         <!-- 版本号也放一份在这儿：更新完服务端第一个看到的就是这一层 -->
         <div class="gate-version">一起听服务端 <span class="ver" data-server-version>—</span></div>
@@ -37,18 +39,19 @@
       <header class="topbar">
         <div class="topbar-left">
           <!-- 房间页才有：回房间列表 -->
-          <a class="icon-btn back" id="backHome" href="/" title="返回房间列表" aria-label="返回房间列表" hidden>←</a>
+          <a class="icon-btn back" id="backHome" href="/" title="返回房间列表" aria-label="返回房间列表" data-i18n-title="back.title" data-i18n-aria="back.title" hidden>←</a>
           <div class="brand">
             <span class="mark" aria-hidden="true">♪</span>
-            <span class="label">一起听</span>
+            <span class="label" data-i18n="brand.label">一起听</span>
             <span class="room" id="roomName">—</span>
           </div>
         </div>
         <div class="topbar-actions">
-          <button class="icon-btn" id="copyLink" title="复制房间链接" aria-label="复制房间链接">⧉</button>
+          <button class="icon-btn" id="copyLink" title="复制房间链接" aria-label="复制房间链接" data-i18n-title="copyLink.title" data-i18n-aria="copyLink.title">⧉</button>
+          <button class="icon-btn" id="langToggle" type="button" title="Switch to English"></button>
           <span class="status">
             <span class="dot" id="dot"></span>
-            <span id="statusText">连接中…</span>
+            <span id="statusText" data-i18n="status.connecting">连接中…</span>
           </span>
         </div>
       </header>
@@ -56,13 +59,13 @@
       <section class="card now" id="now" aria-live="polite">
         <div class="empty">
           <div class="glyph" aria-hidden="true">♪</div>
-          <div class="hint">还没有人在播放</div>
+          <div class="hint" data-i18n="now.empty">还没有人在播放</div>
         </div>
       </section>
 
       <section class="card" id="membersCard">
         <div class="section-head">
-          <h2>房间成员</h2>
+          <h2 data-i18n="section.members">房间成员</h2>
           <span class="count" id="memberCount"></span>
         </div>
         <ul class="members" id="members"></ul>
@@ -71,7 +74,7 @@
       <!-- 房间详情：共享队列 -->
       <section class="card" id="queueCard">
         <div class="section-head">
-          <h2>房间队列</h2>
+          <h2 data-i18n="section.queue">房间队列</h2>
           <span class="count" id="queueCount"></span>
         </div>
         <ul class="queue" id="queue"></ul>
@@ -80,7 +83,7 @@
       <!-- 根路径：列出这台服务端上现在有哪些房间 -->
       <section class="card" id="roomsCard" hidden>
         <div class="section-head">
-          <h2>当前房间</h2>
+          <h2 data-i18n="section.rooms">当前房间</h2>
           <span class="count" id="roomsCount"></span>
         </div>
         <ul class="rooms" id="rooms"></ul>
@@ -88,11 +91,7 @@
 
       <footer>
         <div id="modeLine">—</div>
-        <div>
-          一起听服务端 <span class="ver" data-server-version>—</span>
-          · 由 <a href="https://github.com/SPlayer-Dev/SPlayer-Next" target="_blank" rel="noreferrer">SPlayer-Next</a>
-          控制插件上报 · <span id="serverTime">—</span>
-        </div>
+        <div data-i18n-html="footer.credit">一起听服务端 <span class="ver" data-server-version>—</span> · 由 <a href="https://github.com/SPlayer-Dev/SPlayer-Next" target="_blank" rel="noreferrer">SPlayer-Next</a> 控制插件上报 · <span id="serverTime">—</span></div>
       </footer>
     </div>
 

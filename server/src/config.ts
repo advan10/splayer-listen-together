@@ -8,6 +8,8 @@
  *   ROOM_KEY      全局房间口令。是「谁能进哪个房间」的门，可以和 SERVER_KEY 无关地单独用
  *   MEMBER_TTL_MS 成员多久没心跳算离线，默认 60s
  *   ROOM_TTL_MS   空房间保留多久，默认 12h
+ *   LOCALE        服务端文案语言（API 错误信息、控制台输出）：
+ *                 zh_cn（默认）/ en_us
  */
 
 import { readFileSync } from "node:fs";
@@ -29,7 +31,14 @@ const num = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+/** 归一化 LOCALE：大小写与连字符写法都接受（en-US / EN / en_us 均可） */
+const resolveLocale = (value: string | undefined): "zh_cn" | "en_us" => {
+  const normalized = value?.trim().toLowerCase().replace(/-/g, "_") ?? "";
+  return normalized === "en_us" || normalized === "en" ? "en_us" : "zh_cn";
+};
+
 export const config = {
+  locale: resolveLocale(process.env.LOCALE),
   port: num(process.env.PORT, 8788),
   host: process.env.HOST?.trim() || "0.0.0.0",
   roomKey: process.env.ROOM_KEY?.trim() || "",
