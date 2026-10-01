@@ -3,6 +3,23 @@
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 插件和服务端各自带版本号，插件的版本写在脚本头部的 `@version` 里。
 
+## 0.5.0
+
+对应 [issue #3](https://github.com/fishpond-studio/splayer-listen-together/issues/3)。
+
+### 新增
+
+- **网页端显示服务端版本号**。页脚和密钥闸门里各有一份，写着「一起听服务端 v0.5.0」。
+
+  它是从 `/api/health` 拿的，而那个接口不需要密钥——所以密钥闸门还没过的时候
+  也能看到版本，「更新到底成没成功」一目了然。
+
+  插件自己的版本不在这儿：那个归宿主显示在 SPlayer 的插件卡片上，
+  和本项目的版本号是两套（插件是独立分发的单文件）。
+
+- **房间页加了返回按钮**。以前进了 `/room/<id>` 就没有回房间列表的路，
+  只能手改地址栏。现在左上角有个 ← ，只在房间页出现。
+
 ## 0.4.0
 
 对应 [issue #1](https://github.com/fishpond-studio/splayer-listen-together/issues/1) 剩下的两条。

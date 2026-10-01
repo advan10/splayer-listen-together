@@ -546,6 +546,30 @@
    *  启动
    * ====================================================================== */
 
+  /**
+   * 把服务端版本显示出来。
+   *
+   * /api/health 不需要密钥，所以密钥闸门还没过的时候也能看到版本 ——
+   * 「更新到底成没成功」看这里最直接。
+   */
+  const loadVersion = async () => {
+    try {
+      const response = await fetch("/api/health");
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (!payload || typeof payload.version !== "string") return;
+      // 页脚和密钥闸门里各有一份
+      for (const node of document.querySelectorAll("[data-server-version]")) {
+        node.textContent = `v${payload.version}`;
+      }
+    } catch {
+      /* 拿不到就留着占位符 */
+    }
+  };
+
+  // 版本号先显示出来：它不依赖密钥，闸门还没过也该看得见
+  void loadVersion();
+
   if (IS_INDEX) {
     // 房间列表模式：把房间详情那几块收起来
     $("now").hidden = true;
@@ -559,6 +583,7 @@
     void connect();
   } else {
     $("roomsCard").hidden = true;
+    $("backHome").hidden = false;
     $("roomName").textContent = ROOM_ID;
     document.title = `一起听 · ${ROOM_ID}`;
     void connect();
