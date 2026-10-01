@@ -18,21 +18,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.8.1
+
       # 服务端用 Node 原生类型剥离直接跑 .ts，需要 ≥ 22.18
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
-          cache: npm
+          cache: pnpm
 
       - name: 安装依赖
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: 类型检查
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       # 插件测试台不需要服务端；服务端演练会自己起一个
       - name: 插件测试台
-        run: npm run test:plugin
+        run: pnpm run test:plugin
 
       - name: 服务端演练
-        run: npm run test:server
+        run: pnpm run test:server

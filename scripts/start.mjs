@@ -1,5 +1,5 @@
 /**
- * 服务端启动器（`npm start` / `npm run dev` 走这里）。
+ * 服务端启动器（`pnpm start` / `pnpm run dev` 走这里）。
  *
  * 做两件事：
  *

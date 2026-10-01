@@ -63,10 +63,10 @@ cp .env.example .env.local
 然后启动：
 
 ```bash
-npm start
+pnpm start
 ```
 
-`.env.local` 不进版本库，`npm start` 会自动读它。如果想跳过这一步、直接把配置写在命令行上：
+`.env.local` 不进版本库，`pnpm start` 会自动读它。如果想跳过这一步、直接把配置写在命令行上：
 
 ```bash
 SERVER_KEY=换成你自己的密钥 node server/src/index.ts
@@ -292,7 +292,7 @@ server/src/
     app.js        页面逻辑
 
 scripts/
-  start.mjs          服务端启动器（npm start 走它，会读 .env.local）
+  start.mjs          服务端启动器（pnpm start 走它，会读 .env.local）
   check-plugin.mjs   插件测试台（假 splayer 环境里真实加载插件）
   simulate.mjs       端到端演练（含超时释放、服务端密钥等独立场景）
   seed-demo.mjs      造一间演示房间，调界面用
@@ -311,11 +311,11 @@ LICENSE / CHANGELOG.md / README.md
 网页那三个文件也是原样下发的，改完刷新浏览器就能看到。
 
 ```bash
-npm start                           # 起服务端（读 .env.local）
-npm run dev                         # 改代码自动重启
-npm install && npm run typecheck    # 类型检查
-npm test                            # 跑下面两个测试（服务端没起的话会自己起一个）
-npm run demo                        # 造一间演示房间，浏览器打开看界面
+pnpm start                           # 起服务端（读 .env.local）
+pnpm run dev                         # 改代码自动重启
+pnpm install && pnpm run typecheck    # 类型检查
+pnpm test                            # 跑下面两个测试（服务端没起的话会自己起一个）
+pnpm run demo                        # 造一间演示房间，浏览器打开看界面
 ```
 
 两个测试脚本（都需要服务端先跑起来）：
@@ -325,16 +325,16 @@ npm run demo                        # 造一间演示房间，浏览器打开看
 | [`scripts/check-plugin.mjs`](scripts/check-plugin.mjs) | 用 `node:vm` 搭一个假的 `splayer` 环境真实加载插件：校验脚本头部、`register()` 的声明（事件名、设置项 schema、菜单项），并跑通「房主上报」「听众经 MCP 自动切歌」「两种控制模式的差别」几条路径 |
 | [`scripts/simulate.mjs`](scripts/simulate.mjs) | 扮演房主 + 听众两个假客户端，把服务端流程跑一遍（上位、长轮询、进度推算、换歌、乱序丢弃、控制模式、房主交接），再单独拉临时服务端验证超时释放与密钥门禁 |
 
-改完服务端先跑 `npm run test:server`，改完插件先跑 `npm run test:plugin`。
+改完服务端先跑 `pnpm run test:server`，改完插件先跑 `pnpm run test:plugin`。
 
 这两个套件都不依赖外部服务：服务端演练跑起来会自己在 8788 上起一个服务端
 （已经在跑就用现成的），只读那个步骤则单独拉临时实例。所以 CI 里一条
-`npm run test:server` 就够了，不需要另外准备后台进程。
+`pnpm run test:server` 就够了，不需要另外准备后台进程。
 
 CI 配在 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)：push 到 main 和所有 PR
 都会跑类型检查 + 两个测试套件。
 
-`npm run demo` 会往房间 `demo` 里塞一个房主和三个听众，方便对着真实数据调网页界面；
+`pnpm run demo` 会往房间 `demo` 里塞一个房主和三个听众，方便对着真实数据调网页界面；
 加 `--paused` 看暂停态，加 `--mode host` 看「只有房主可调」。
 
 ## 许可

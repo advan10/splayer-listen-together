@@ -505,7 +505,7 @@ const keyScenario = async () => {
 /**
  * main() 里那些用例需要一个跑着的服务端。
  *
- * 没跑着就自己起一个 —— 这样 `npm test` 一条命令能跑完，
+ * 没跑着就自己起一个 —— 这样 `pnpm test` 一条命令能跑完，
  * CI 里也不用额外准备一个后台进程。
  */
 let ownedServer = null;
