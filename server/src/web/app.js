@@ -72,6 +72,15 @@
     return `hsl(${hash} 58% 68%)`;
   };
 
+  /**
+   * 房间控制模式的说法。
+   *
+   * 网页是给人「看」的，所以用陈述句（谁在控制），而不是插件设置里那种
+   * 命令式的「你可以调」——那是配置项的口吻。
+   */
+  const modeLabelOf = (room) =>
+    room && room.controlMode === "all" ? "大家一起控制" : "房主控制";
+
   const SOURCE_LABELS = {
     netease: "网易云",
     qqmusic: "QQ 音乐",
@@ -144,7 +153,7 @@
 
     const artists = (track.artists || []).map((artist) => artist.name).join(" / ") || "未知艺人";
     const cover = safeImageUrl(track.cover || (track.album && track.album.cover));
-    const modeLabel = room && room.controlMode === "all" ? "大家都可以调" : "只有房主可调";
+    const modeLabel = modeLabelOf(room);
     const driver = room && (room.members || []).find((m) => m.clientId === room.driverClientId);
     const playing = view.playing;
 
@@ -156,7 +165,7 @@
       `<span class="tag">${modeLabel}</span>`,
     ];
     if (driver && room.controlMode === "all") {
-      tags.push(`<span class="tag accent">${esc(driver.name)} 在控</span>`);
+      tags.push(`<span class="tag accent">${esc(driver.name)} 正在控制</span>`);
     }
 
     container.className = `card now${playing ? "" : " paused"}`;
@@ -200,7 +209,6 @@
   const renderMembers = () => {
     if (!room) return;
     const members = room.members || [];
-    const modeLabel = room.controlMode === "all" ? "大家都可以调" : "只有房主可调";
     $("memberCount").textContent = members.length ? `${members.length} 人` : "";
 
     $("members").innerHTML = members.length
@@ -212,8 +220,8 @@
             const badges = [
               `<span class="badge ${isHost ? "host" : ""}">${isHost ? "房主" : "听众"}</span>`,
             ];
-            // 「大家都可以调」时才需要标出谁在控；只有房主可调时房主就是控制者，标了是废话
-            if (isDriver) badges.push('<span class="badge host">在控</span>');
+            // 「大家一起控制」时才需要标出谁在控制；房主控制模式下房主就是控制者，标了是废话
+            if (isDriver) badges.push('<span class="badge host">正在控制</span>');
             return `
               <li class="member">
                 <span class="avatar" style="background:${avatarColor(name)}" aria-hidden="true">${esc(name.slice(0, 1))}</span>
@@ -226,8 +234,8 @@
 
     $("modeLine").textContent =
       room.controlMode === "all"
-        ? `控制模式：${modeLabel} · 谁最后动手谁在控`
-        : `控制模式：${modeLabel}`;
+        ? `控制模式：${modeLabelOf(room)} · 谁最后操作，谁就接管`
+        : `控制模式：${modeLabelOf(room)}`;
   };
 
   const applyRoom = (payload) => {
@@ -310,7 +318,7 @@
         const subtitle = now
           ? `${item.playing ? "" : "已暂停 · "}${now.title}${artists}`
           : "还没有人在播放";
-        const modeLabel = item.controlMode === "all" ? "大家都可以调" : "只有房主可调";
+        const modeLabel = modeLabelOf(item);
 
         return `
           <li class="room-row">
