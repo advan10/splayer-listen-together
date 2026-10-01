@@ -270,11 +270,30 @@ target    = playback.position + (playback.playing ? serverNow - playback.publish
 | `remove` | `entryId` | 需要控制权 |
 | `clear` | — | 需要控制权 |
 
-「需要控制权」与 `/publish` 同一套规则：`host` 模式下只有房主（或持有有效房主令牌的人），
-`all` 模式下谁都可以。没资格时返回 `403 NOT_ALLOWED`。
+「需要控制权」与 `/publish`、`/mode` 是同一套规则，判据有两个，满足其一即可：
+
+- `controlMode` 是 `all`；
+- 或者是房主本人；
+- **或者 body 里带了有效的 `hostToken`** —— 服务端重启过、或者房主位被别人顶掉之后，
+  靠它把自己的房主身份认回来（令牌是首次当上房主时下发的，插件存在本地）。
+
+判定不通过返回 `403 NOT_ALLOWED`。
+
+`hostToken` 三个动作都接受，且**都是可选的**：`add` 不看权限，带不带都行。
 
 ```json
 { "clientId": "a7b6265283128bf2", "action": "add", "tracks": [ /* Track */ ] }
+```
+
+带令牌删队列（房主用这个）：
+
+```json
+{
+  "clientId": "a7b6265283128bf2",
+  "hostToken": "4616eecd…",
+  "action": "remove",
+  "entryId": "a3f19c"
+}
 ```
 
 **响应**每次都把整条队列带回来，省一次往返：

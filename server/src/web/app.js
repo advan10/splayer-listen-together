@@ -327,7 +327,8 @@
     }
   };
 
-  const openStream = () => {    if (source) source.close();
+  const openStream = () => {
+    if (source) source.close();
     source = new EventSource(keyed(`/api/room/${encodeURIComponent(ROOM_ID)}/events`));
 
     source.onopen = () => {
