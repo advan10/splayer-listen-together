@@ -28,15 +28,21 @@
         />
         <button id="gateButton">进入</button>
         <div class="error" id="gateError" role="alert"></div>
+        <!-- 版本号也放一份在这儿：更新完服务端第一个看到的就是这一层 -->
+        <div class="gate-version">一起听服务端 <span class="ver" data-server-version>—</span></div>
       </div>
     </div>
 
     <div class="wrap">
       <header class="topbar">
-        <div class="brand">
-          <span class="mark" aria-hidden="true">♪</span>
-          <span class="label">一起听</span>
-          <span class="room" id="roomName">—</span>
+        <div class="topbar-left">
+          <!-- 房间页才有：回房间列表 -->
+          <a class="icon-btn back" id="backHome" href="/" title="返回房间列表" aria-label="返回房间列表" hidden>←</a>
+          <div class="brand">
+            <span class="mark" aria-hidden="true">♪</span>
+            <span class="label">一起听</span>
+            <span class="room" id="roomName">—</span>
+          </div>
         </div>
         <div class="topbar-actions">
           <button class="icon-btn" id="copyLink" title="复制房间链接" aria-label="复制房间链接">⧉</button>
@@ -83,7 +89,8 @@
       <footer>
         <div id="modeLine">—</div>
         <div>
-          由 <a href="https://github.com/SPlayer-Dev/SPlayer-Next" target="_blank" rel="noreferrer">SPlayer-Next</a>
+          一起听服务端 <span class="ver" data-server-version>—</span>
+          · 由 <a href="https://github.com/SPlayer-Dev/SPlayer-Next" target="_blank" rel="noreferrer">SPlayer-Next</a>
           控制插件上报 · <span id="serverTime">—</span>
         </div>
       </footer>

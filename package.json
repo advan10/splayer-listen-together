@@ -1,6 +1,6 @@
 {
   "name": "splayer-listen-together",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "SPlayer-Next 一起听：客户端控制插件 + 自建同步服务端（默认走网易云）",
   "license": "AGPL-3.0-only",
