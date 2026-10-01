@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { config, VERSION } from "./config.ts";
 import { RoomError, roomStore } from "./rooms.ts";
-import type { JoinRequest, PollRequest, PublishRequest } from "./types.ts";
+import type { JoinRequest, PluginTrack, PollRequest, PublishRequest, QueueRequest } from "./types.ts";
 import { extractServerKey, isValidRoomId, readJson, safeEqual, sendEmpty, sendJson } from "./util.ts";
 
 const startedAt = Date.now();
@@ -53,7 +53,7 @@ export const handleApi = async (
       return true;
     }
 
-    const match = /^\/api\/room\/([^/]+)(?:\/(join|poll|publish|leave|mode))?$/.exec(pathname);
+    const match = /^\/api\/room\/([^/]+)(?:\/(join|poll|publish|leave|mode|queue))?$/.exec(pathname);
     if (!match) {
       fail(res, 404, "未知接口", "NOT_FOUND");
       return true;
@@ -79,6 +79,22 @@ export const handleApi = async (
         return true;
       }
       sendJson(res, 200, { ok: true, room: snapshot });
+      return true;
+    }
+
+    // GET /api/room/:id/queue —— 取整条队列（队列不进快照，单独拉）
+    if (action === "queue" && req.method === "GET") {
+      const result = roomStore.queueOf(roomId);
+      if (!result) {
+        fail(res, 404, "房间不存在", "ROOM_NOT_FOUND");
+        return true;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        queueVersion: result.queueVersion,
+        queue: result.queue,
+        serverTime: Date.now(),
+      });
       return true;
     }
 
@@ -182,6 +198,66 @@ export const handleApi = async (
         version: result.room.version,
         serverTime: Date.now(),
       });
+      return true;
+    }
+
+    if (action === "queue") {
+      const input = body as unknown as QueueRequest;
+      if (typeof input.clientId !== "string") {
+        fail(res, 400, "缺少 clientId", "BAD_REQUEST");
+        return true;
+      }
+
+      const respond = (changed: number | undefined): void => {
+        const current = roomStore.queueOf(roomId);
+        sendJson(res, 200, {
+          ok: true,
+          ...(changed === undefined ? {} : { changed }),
+          queueVersion: current ? current.queueVersion : 0,
+          queue: current ? current.queue : [],
+          serverTime: Date.now(),
+        });
+      };
+
+      if (input.action === "add") {
+        const tracks = Array.isArray(input.tracks) ? (input.tracks as PluginTrack[]) : [];
+        if (tracks.length === 0) {
+          fail(res, 400, "没有要加入队列的曲目", "BAD_REQUEST");
+          return true;
+        }
+        const result = roomStore.addToQueue(roomId, {
+          clientId: input.clientId,
+          tracks,
+          ...(input.position === "next" ? { position: "next" as const } : {}),
+        });
+        respond(result.added);
+        return true;
+      }
+
+      if (input.action === "remove") {
+        if (typeof input.entryId !== "string") {
+          fail(res, 400, "缺少 entryId", "BAD_REQUEST");
+          return true;
+        }
+        const result = roomStore.removeFromQueue(roomId, {
+          clientId: input.clientId,
+          ...(typeof input.hostToken === "string" ? { hostToken: input.hostToken } : {}),
+          entryId: input.entryId,
+        });
+        respond(result.removed);
+        return true;
+      }
+
+      if (input.action === "clear") {
+        const result = roomStore.clearQueue(roomId, {
+          clientId: input.clientId,
+          ...(typeof input.hostToken === "string" ? { hostToken: input.hostToken } : {}),
+        });
+        respond(result.cleared);
+        return true;
+      }
+
+      fail(res, 400, "action 只能是 add / remove / clear", "BAD_REQUEST");
       return true;
     }
 

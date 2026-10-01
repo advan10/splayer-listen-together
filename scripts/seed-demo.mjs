@@ -72,6 +72,35 @@ const main = async () => {
   });
   console.log(`  ✓ 上报曲目（${PAUSED ? "已暂停" : "播放中"}）`);
 
+  // 房间队列：几个人各点几首，网页上就能看到队列那一块
+  const QUEUE = [
+    ["海阔天空", "Beyond", "https://picsum.photos/seed/q1/300"],
+    ["夜空中最亮的星", "逃跑计划", "https://picsum.photos/seed/q2/300"],
+    ["起风了", "买辣椒也用券", "https://picsum.photos/seed/q3/300"],
+    ["Duvet", "Bôa", "https://picsum.photos/seed/q4/300"],
+  ];
+  let queued = 0;
+  for (const [title, artist, cover] of QUEUE) {
+    // 队列是谁都可以加的，演示里统一用房主身份代劳
+    const result = await post(`/api/room/${ROOM}/queue`, {
+      clientId: host.clientId,
+      hostToken: host.hostToken,
+      action: "add",
+      tracks: [
+        {
+          id: `demo-${title}`,
+          source: "netease",
+          title,
+          artists: [{ name: artist }],
+          duration: 240000,
+          cover,
+        },
+      ],
+    });
+    queued += result.changed || 0;
+  }
+  console.log(`  ✓ 房间队列 ${queued} 首`);
+
   console.log(`\n  打开 ${BASE}/room/${ROOM}${KEY ? `?key=${KEY}` : ""}\n`);
 };
 

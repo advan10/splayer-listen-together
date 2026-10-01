@@ -5,6 +5,8 @@ import type {
   MemberRole,
   Playback,
   PluginTrack,
+  QueueEntry,
+  QueuePosition,
   RoomSnapshot,
   RoomSummary,
 } from "./types.ts";
@@ -32,6 +34,10 @@ interface Room {
   controlMode: ControlMode;
   /** 当前控制者（最后一次被接受的上报者） */
   driverClientId: string | null;
+  /** 房间共享队列：大家的「下一首」从这里来 */
+  queue: QueueEntry[];
+  /** 队列版本，一变就 +1 */
+  queueVersion: number;
   members: Map<string, MemberInfo>;
   waiters: Set<Waiter>;
   /** 网页端 SSE 订阅者 */
@@ -53,6 +59,9 @@ export class RoomError extends Error {
 const membersOf = (room: Room): MemberInfo[] =>
   [...room.members.values()].sort((a, b) => a.joinedAt - b.joinedAt);
 
+/** 判断「同一首歌」用的键 */
+const trackKeyOf = (track: PluginTrack): string => `${track.source ?? ""}:${track.id}`;
+
 const snapshotOf = (room: Room): RoomSnapshot => ({
   roomId: room.id,
   name: room.name,
@@ -63,6 +72,8 @@ const snapshotOf = (room: Room): RoomSnapshot => ({
   driverClientId: room.driverClientId,
   members: membersOf(room),
   serverTime: now(),
+  queueVersion: room.queueVersion,
+  queueLength: room.queue.length,
 });
 
 /**
@@ -89,6 +100,8 @@ export class RoomStore {
         hostTokenHash: null,
         controlMode: "host",
         driverClientId: null,
+        queue: [],
+        queueVersion: 1,
         members: new Map(),
         waiters: new Set(),
         listeners: new Set(),
@@ -347,6 +360,118 @@ export class RoomStore {
       this.bump(room);
     }
     return { accepted: true, room: snapshotOf(room) };
+  }
+
+  /* ── 共享队列 ───────────────────────────────────────────────────────────── */
+
+  /** 这个人有没有「改队列」的资格（和上报的控制权同一套规则） */
+  private mayControl(room: Room, clientId: string, hostToken?: string): boolean {
+    const tokenValid =
+      Boolean(hostToken) &&
+      Boolean(room.hostTokenHash) &&
+      sha256(hostToken as string) === room.hostTokenHash;
+    if (room.controlMode === "all") return true;
+    return room.hostClientId === clientId || tokenValid;
+  }
+
+  /** 取整条队列：不进快照（队列可能很长），客户端按 queueVersion 变化来拉 */
+  queueOf(roomId: string): { queueVersion: number; queue: QueueEntry[] } | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    return { queueVersion: room.queueVersion, queue: room.queue };
+  }
+
+  /**
+   * 往房间队列里加歌。
+   *
+   * 谁都可以加 —— 队列是张「点歌单」，房主看着不对可以删掉。
+   * 只有删除和清空才需要控制权。
+   */
+  addToQueue(
+    roomId: string,
+    input: { clientId: string; tracks: PluginTrack[]; position?: QueuePosition },
+  ): { added: number; room: RoomSnapshot } {
+    const room = this.rooms.get(roomId);
+    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    const member = room.members.get(input.clientId);
+    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    member.lastSeen = now();
+
+    // 同一首歌不重复入队，免得本地播放队列和服务端队列越差越远
+    const seen = new Set(room.queue.map((entry) => trackKeyOf(entry.track)));
+    const fresh: QueueEntry[] = [];
+    for (const track of input.tracks.slice(0, config.maxQueueAdd)) {
+      if (!track || typeof track.id !== "string" || typeof track.title !== "string") continue;
+      const key = trackKeyOf(track);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fresh.push({
+        id: randomHex(6),
+        track,
+        addedBy: input.clientId,
+        addedAt: now(),
+        insertNext: input.position === "next",
+      });
+    }
+    if (fresh.length === 0) return { added: 0, room: snapshotOf(room) };
+
+    if (input.position === "next") room.queue.unshift(...fresh);
+    else room.queue.push(...fresh);
+
+    // 超上限从队尾丢：先保住在眼前的那些
+    if (room.queue.length > config.maxQueue) room.queue.length = config.maxQueue;
+
+    room.queueVersion += 1;
+    this.bump(room);
+    return { added: fresh.length, room: snapshotOf(room) };
+  }
+
+  /** 从队列里删一项；需要控制权 */
+  removeFromQueue(
+    roomId: string,
+    input: { clientId: string; hostToken?: string; entryId: string },
+  ): { removed: number; room: RoomSnapshot } {
+    const room = this.rooms.get(roomId);
+    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    const member = room.members.get(input.clientId);
+    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    member.lastSeen = now();
+
+    if (!this.mayControl(room, input.clientId, input.hostToken)) {
+      throw new RoomError("现在只有控制者能改队列", "NOT_ALLOWED", 403);
+    }
+
+    const index = room.queue.findIndex((entry) => entry.id === input.entryId);
+    if (index < 0) return { removed: 0, room: snapshotOf(room) };
+
+    room.queue.splice(index, 1);
+    room.queueVersion += 1;
+    this.bump(room);
+    return { removed: 1, room: snapshotOf(room) };
+  }
+
+  /** 清空队列；需要控制权 */
+  clearQueue(
+    roomId: string,
+    input: { clientId: string; hostToken?: string },
+  ): { cleared: number; room: RoomSnapshot } {
+    const room = this.rooms.get(roomId);
+    if (!room) throw new RoomError("房间不存在", "ROOM_NOT_FOUND", 404);
+    const member = room.members.get(input.clientId);
+    if (!member) throw new RoomError("尚未加入房间", "NOT_JOINED", 409);
+    member.lastSeen = now();
+
+    if (!this.mayControl(room, input.clientId, input.hostToken)) {
+      throw new RoomError("现在只有控制者能改队列", "NOT_ALLOWED", 403);
+    }
+
+    const cleared = room.queue.length;
+    if (cleared === 0) return { cleared: 0, room: snapshotOf(room) };
+
+    room.queue = [];
+    room.queueVersion += 1;
+    this.bump(room);
+    return { cleared, room: snapshotOf(room) };
   }
 
   /**
