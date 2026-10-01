@@ -2,7 +2,7 @@
  * @name        Listen Together
  * @id          listen-together.splayer
  * @version     0.4.0
- * @description 一起听：把当前播放同步到自建服务端，或跟着房主一起播放（默认网易云）
+ * @description 一起听：把当前播放同步到自建服务端，或跟着房主一起播放
  * @author      Re-BeiChen
  * @type        control
  * @apiLevel    2
