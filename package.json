@@ -1,0 +1,32 @@
+{
+  "name": "splayer-listen-together",
+  "version": "0.2.1",
+  "private": true,
+  "description": "SPlayer-Next 一起听：客户端控制插件 + 自建同步服务端（默认走网易云）",
+  "license": "AGPL-3.0-only",
+  "author": "Re-BeiChen",
+  "type": "module",
+  "keywords": [
+    "splayer",
+    "splayer-next",
+    "listen-together",
+    "plugin",
+    "netease"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node scripts/start.mjs",
+    "dev": "node --watch scripts/start.mjs",
+    "typecheck": "tsc --noEmit",
+    "demo": "node scripts/seed-demo.mjs",
+    "test": "node scripts/check-plugin.mjs && node scripts/simulate.mjs",
+    "test:plugin": "node scripts/check-plugin.mjs",
+    "test:server": "node scripts/simulate.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,17 @@
+services:
+  listen-together:
+    build: .
+    container_name: listen-together
+    restart: unless-stopped
+    ports:
+      - "8788:8788"
+    environment:
+      PORT: "8788"
+      HOST: "0.0.0.0"
+      # 服务端密钥：设了之后所有接口都要带对才能用（插件设置里填同一个值）
+      # 不设就是谁都能连上来建房间，公网/局域网里务必设一个
+      SERVER_KEY: "change-me"
+      # 房间口令：可选，额外给某个房间上锁
+      # ROOM_KEY: "another-secret"
+      MEMBER_TTL_MS: "60000"
+      ROOM_TTL_MS: "43200000"

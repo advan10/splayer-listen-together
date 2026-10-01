@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0c10" />
+    <meta name="robots" content="noindex" />
+    <title>一起听</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' x='4' font-size='24'%3E%F0%9F%8E%B5%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- 封面弥散出来的背景光晕 -->
+    <div class="bg" id="bg" aria-hidden="true"></div>
+    <div class="bg-veil" aria-hidden="true"></div>
+
+    <!-- 服务端设了密钥时挡在门口的一层 -->
+    <div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+      <div class="card">
+        <h3 id="gateTitle">需要服务端密钥</h3>
+        <p>这台服务端开启了访问密钥，填对才能看房间。</p>
+        <input
+          id="gateInput"
+          type="password"
+          placeholder="服务端密钥"
+          autocomplete="current-password"
+          aria-label="服务端密钥"
+        />
+        <button id="gateButton">进入</button>
+        <div class="error" id="gateError" role="alert"></div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <header class="topbar">
+        <div class="brand">
+          <span class="mark" aria-hidden="true">♪</span>
+          <span class="label">一起听</span>
+          <span class="room" id="roomName">—</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn" id="copyLink" title="复制房间链接" aria-label="复制房间链接">⧉</button>
+          <span class="status">
+            <span class="dot" id="dot"></span>
+            <span id="statusText">连接中…</span>
+          </span>
+        </div>
+      </header>
+
+      <section class="card now" id="now" aria-live="polite">
+        <div class="empty">
+          <div class="glyph" aria-hidden="true">♪</div>
+          <div class="hint">还没有人在播放</div>
+        </div>
+      </section>
+
+      <section class="card" id="membersCard">
+        <div class="section-head">
+          <h2>房间成员</h2>
+          <span class="count" id="memberCount"></span>
+        </div>
+        <ul class="members" id="members"></ul>
+      </section>
+
+      <!-- 根路径：列出这台服务端上现在有哪些房间 -->
+      <section class="card" id="roomsCard" hidden>
+        <div class="section-head">
+          <h2>当前房间</h2>
+          <span class="count" id="roomsCount"></span>
+        </div>
+        <ul class="rooms" id="rooms"></ul>
+      </section>
+
+      <footer>
+        <div id="modeLine">—</div>
+        <div>
+          由 <a href="https://github.com/SPlayer-Dev/SPlayer-Next" target="_blank" rel="noreferrer">SPlayer-Next</a>
+          控制插件上报 · <span id="serverTime">—</span>
+        </div>
+      </footer>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
