@@ -502,14 +502,43 @@ const keyScenario = async () => {
   }
 };
 
+/**
+ * main() 里那些用例需要一个跑着的服务端。
+ *
+ * 没跑着就自己起一个 —— 这样 `npm test` 一条命令能跑完，
+ * CI 里也不用额外准备一个后台进程。
+ */
+let ownedServer = null;
+
+const serverIsUp = async () => {
+  try {
+    const response = await fetch(`${BASE}/api/health`, { signal: AbortSignal.timeout(1_000) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+const ensureServer = async () => {
+  if (await serverIsUp()) return;
+  const port = Number(new URL(BASE).port || 80);
+  console.log(`\n${BASE} 上没有服务端，测试自己起一个（端口 ${port}）`);
+  ownedServer = await startTempServer(port, {});
+  if (!ownedServer) throw new Error(`没能在 ${port} 端口把服务端起来`);
+};
+
 const run = async () => {
   try {
+    await ensureServer();
     await main();
     await timeoutScenario();
     await keyScenario();
   } catch (error) {
     failures += 1;
     console.error("\n演练中断：", error.message);
+  } finally {
+    // 自己起的那个记得关掉；本来就有的别去动它
+    ownedServer?.stop();
   }
   console.log(`\n${failures === 0 ? "全部通过 ✓" : `${failures} 项未通过 ✗`}\n`);
   process.exit(failures === 0 ? 0 : 1);
