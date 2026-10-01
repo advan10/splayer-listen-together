@@ -1,13 +1,13 @@
 /**
  * @name        Listen Together
  * @id          listen-together.splayer
- * @version     0.2.1
+ * @version     0.3.0
  * @description 一起听：把当前播放同步到自建服务端，或跟着房主一起播放（默认网易云）
  * @author      Re-BeiChen
  * @type        control
  * @apiLevel    2
  * @grant       network control ui
- * @changelog   修重连时循环越攒越多的问题（改设置不再重复建连接）；分享链接不再带密钥
+ * @changelog   修「大家都可以调」模式下控制者来回漂的问题；加「本地暂停不影响别人」
  */
 
 /*
@@ -26,7 +26,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const VERSION = "0.2.1";
+const VERSION = "0.3.0";
 
 /** 长轮询的服务端等待时长与客户端超时（客户端必须更大，先让服务端开口） */
 const POLL_WAIT_MS = 25_000;
@@ -60,6 +60,7 @@ const SETTING_KEYS = [
   "mcpKey",
   "syncPlayState",
   "syncSeek",
+  "localPause",
   "seekThresholdMs",
   "heartbeatSec",
   "verboseLog",
@@ -87,6 +88,7 @@ const readSettings = () => {
   settings.mcpKey = String(get("mcpKey", ""));
   settings.syncPlayState = Boolean(get("syncPlayState", true));
   settings.syncSeek = Boolean(get("syncSeek", true));
+  settings.localPause = Boolean(get("localPause", false));
   settings.seekThresholdMs = Number(get("seekThresholdMs", 2000)) || 2000;
   settings.heartbeatSec = Number(get("heartbeatSec", 5)) || 5;
   settings.verboseLog = Boolean(get("verboseLog", false));
@@ -196,6 +198,13 @@ splayer.register({
       placeholder: "粘贴密钥",
     },
     { key: "syncPlayState", type: "switch", label: "同步播放 / 暂停", default: true },
+    {
+      key: "localPause",
+      type: "switch",
+      label: "本地暂停不影响别人",
+      default: false,
+      description: "暂停时只停自己这一份，其他人照常；继续播放时自动追上进度。由你在控时仍会正常同步",
+    },
     {
       key: "syncSeek",
       type: "switch",
@@ -438,14 +447,24 @@ const joinRoom = async () => {
 /** 有没有资格持续上报（心跳用）：all 模式下只有在控的人 / 无人控时才接手 */
 const canReport = () => {
   if (!settings.enabled || !session.joined) return false;
+  // 本地暂停期间谁也别报：否则会把自己的「暂停」变成全房间的暂停
+  if (detached) return false;
   if (session.controlMode === "host") return session.isHost;
   if (session.driverClientId === session.clientId) return true;
   return session.driverClientId === null && Boolean(local.track);
 };
 
-/** 本地动作能不能上报（事件用）：all 模式下任何人都能靠动手抢到控制权 */
+/**
+ * 本地动作能不能上报（事件用）：all 模式下任何人都能靠动手抢到控制权。
+ *
+ * 注意「动手」指的是换歌、播放、暂停这类**决定**。
+ * 歌词行进（lineChange）不算 —— 那只是时间流逝，跟随别人时也一直在发生。
+ * 早先把两者混在一起，听众每隔几秒就会把控制权从别人手里抢走，
+ * 控制者在成员之间来回漂（见 issue #1）。
+ */
 const canReportIntent = () => {
   if (!settings.enabled || !session.joined) return false;
+  if (detached) return false;
   if (isSuppressed()) return false;
   if (session.controlMode === "host") return session.isHost;
   return true;
@@ -507,9 +526,16 @@ const publishHeartbeat = async (positionOverride) => {
   await sendPublish(positionOverride);
 };
 
-/** 本机动作触发的上报，按需节流 */
-const publishThrottled = (force = false) => {
-  if (!canReportIntent()) return;
+/**
+ * 节流上报。
+ *
+ * @param options.force    跳过节流（播放/暂停、换歌要立刻反映出去）
+ * @param options.asIntent 算不算「本机动手」—— 只有动手才能抢控制权，
+ *                         歌词行进这类进度更新不能
+ */
+const publishThrottled = ({ force = false, asIntent = false } = {}) => {
+  const allowed = () => (asIntent ? canReportIntent() : canReport());
+  if (!allowed()) return;
   if (publishPending) return;
   const elapsed = Date.now() - lastPublishAt;
   if (force || elapsed >= PUBLISH_THROTTLE_MS) {
@@ -519,7 +545,7 @@ const publishThrottled = (force = false) => {
   publishPending = true;
   setTimeout(() => {
     publishPending = false;
-    if (!canReportIntent()) return;
+    if (!allowed()) return;
     void sendPublish();
   }, PUBLISH_THROTTLE_MS - elapsed);
 };
@@ -717,6 +743,58 @@ const expectedPosition = (playback) => {
   return playback.position + elapsed;
 };
 
+/* ========================================================================== *
+ *  本地暂停（暂时脱离）
+ *
+ *  「我先停一下接个电话」和「我不想听了」是两回事。开启之后，
+ *  不是控制者的人按暂停只暂停自己：不广播、也不会被别人拉回去；
+ *  继续播放时自动跳回大家此刻的进度。
+ * ========================================================================== */
+
+let detached = false;
+
+/** 此刻是不是由我在控 */
+const isDriverNow = () =>
+  session.controlMode === "host" ? session.isHost : session.driverClientId === session.clientId;
+
+/** 暂时脱离：只停自己这一份 */
+const detach = () => {
+  if (detached) return;
+  detached = true;
+  noticeOnce("detached", "已暂时脱离同步：其他人照常，你继续播放时会自动追上进度");
+};
+
+/** 重新跟上：跳到大家此刻的位置 */
+const reattach = async () => {
+  if (!detached) return;
+  detached = false;
+  lastNoticeKey = "";
+
+  const playback = session.latest && session.latest.playback;
+  if (!playback || !playback.track) return;
+
+  const target = expectedPosition(playback);
+
+  if (!sameTrack(local.track, playback.track)) {
+    // 脱离期间大家换过歌了：能自动切就切过去，切完由 pendingFollow 对齐进度
+    if (settings.autoFollow && mcp.configured) {
+      suppressPublish(5_000);
+      const result = await mcp.playTrack(playback.track);
+      if (result.ok) {
+        pendingFollow = { key: trackKey(playback.track), playback };
+        return;
+      }
+    }
+    log.info("[一起听] 脱离期间大家换过歌了，你这边还停在原来那首");
+    return;
+  }
+
+  log.info("[一起听] 已追上大家的进度：", `${Math.round(target / 1000)}s`);
+  suppressPublish();
+  splayer.player.seek(Math.max(0, Math.round(target)));
+  notePosition(target);
+};
+
 /**
  * 应用服务端状态。
  * @param room 服务端房间快照
@@ -731,6 +809,8 @@ const applyRoom = async (room) => {
   if (!playback || !playback.track) return;
   if (playback.sourceClientId === session.clientId) return;
   if (!settings.enabled) return;
+  // 本地暂停了就先不跟，继续播放时再一次性追上去
+  if (detached) return;
 
   // 「当前控制者」的说法只在 all 模式下有意义，日志里区分一下更好读
   const who = session.controlMode === "all" ? "房间里的人" : "房主";
@@ -832,7 +912,7 @@ splayer.player.on("trackChange", ({ track }) => {
 
   // 本机用户换了歌：立即上报（all 模式下这一步就把控制权拿到自己手里）
   if (canReportIntent()) {
-    publishThrottled(true);
+    publishThrottled({ force: true, asIntent: true });
     // 起播后真实进度会有几百毫秒，补一次准确值
     setTimeout(() => {
       void refreshPosition().then((position) => {
@@ -846,12 +926,28 @@ splayer.player.on("trackChange", ({ track }) => {
 splayer.player.on("playStateChange", ({ state, position }) => {
   local.playing = state === "playing";
   notePosition(position);
-  publishThrottled(true);
+
+  // 刚跟随过远端状态，这次变化不是本机操作
+  if (isSuppressed()) return;
+
+  // 「本地暂停」：不是控制者的人按暂停只停自己，不广播也不被拉回去
+  if (settings.localPause && !isDriverNow()) {
+    if (state !== "playing") {
+      detach();
+      return;
+    }
+    if (detached) {
+      void reattach();
+      return;
+    }
+  }
+
+  publishThrottled({ force: true, asIntent: true });
 });
 
 splayer.player.on("lineChange", ({ position }) => {
   notePosition(position);
-  // 歌词行进得比心跳密，节流一下，别每行都打一次服务端
+  // 歌词行进比心跳密，节流一下就好。它只是进度，不能拿来抢控制权
   publishThrottled();
 });
 
@@ -982,6 +1078,7 @@ const start = async () => {
   session.joined = false;
   session.version = 0;
   retryDelay = RETRY_MIN_MS;
+  detached = false;
 
   // 先同步试一次，好让「状态」菜单立刻能给出结果；失败也没关系，循环里会自愈
   await joinRoom();
@@ -1118,10 +1215,11 @@ splayer.on("menuClick", async ({ menuId }) => {
         ? describe(session.latest.playback.track)
         : describe(local.track);
       const driving =
-        canReport() && session.controlMode === "all" && session.driverClientId === session.clientId
+        session.controlMode === "all" && session.driverClientId === session.clientId
           ? "（我在控）"
           : "";
-      return { toast: `${headline}${driving}｜当前：${nowPlaying}` };
+      const detachedNote = detached ? "（已本地暂停，继续播放会自动追上）" : "";
+      return { toast: `${headline}${driving}${detachedNote}｜当前：${nowPlaying}` };
     }
     default:
       return undefined;

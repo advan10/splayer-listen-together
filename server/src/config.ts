@@ -9,6 +9,21 @@
  *   MEMBER_TTL_MS 成员多久没心跳算离线，默认 60s
  *   ROOM_TTL_MS   空房间保留多久，默认 12h
  */
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+/** 从 package.json 单点读取，避免版本号散在多处、改一处忘一处 */
+const readVersion = (): string => {
+  try {
+    const file = path.join(import.meta.dirname, "..", "..", "package.json");
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as { version?: unknown };
+    return typeof parsed.version === "string" ? parsed.version : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+};
+
 const num = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -27,4 +42,5 @@ export const config = {
   maxMembers: 32,
 } as const;
 
-export const VERSION = "0.2.1";
+/** 服务端版本，取 package.json；插件有自己的独立版本号（写在脚本头部） */
+export const VERSION = readVersion();

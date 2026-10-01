@@ -433,6 +433,94 @@ await settle(700);
 const echoes = state.requests.filter((r) => r.url.endsWith("/publish"));
 check("跟随之后没有把状态报回去（没有回声）", echoes.length, 0);
 
+// 这一条是「控制者会漂移」的根子：跟随别人的时候，播放中会不断收到歌词行进事件，
+// 而歌词行进只是时间流逝，不是「我动手了」——如果把它也算成本机操作，
+// 听众每隔几秒就会把控制权从别人手里抢过来，控制者就在成员之间来回跳。
+console.log("\n[6.1] 歌词行进不能抢走控制权");
+
+state.requests.length = 0;
+// 跟随切歌会抑制 5 秒，等它彻底过去，模拟「歌已经正常放着」的那段时间
+await settle(5_500);
+state.events.lineChange({ index: 3, position: 9_000 });
+await settle(300);
+
+check(
+  "听众的歌词行进不会上报（控制者没被抢走）",
+  state.requests.filter((r) => r.url.endsWith("/publish")).length,
+  0,
+);
+
+// 反过来：真正动手（换歌）还是要能抢过来
+state.requests.length = 0;
+state.events.trackChange({ track: LOCAL_TRACK });
+await settle(300);
+check(
+  "但真的换歌仍然能接管",
+  state.requests.filter((r) => r.url.endsWith("/publish")).length > 0,
+  true,
+);
+
+/* ── 6.2 本地暂停 ─────────────────────────────────────────────────────────── */
+
+console.log("\n[6.2] 本地暂停：只停自己，继续播放时追上");
+
+await boot({ localPause: true }, "guest");
+state.events.trackChange({ track: HOST_TRACK });
+state.events.playStateChange({ state: "playing", position: 60_000 });
+await settle(200);
+
+/** 房间里别人在放同一首歌 */
+const othersPlaying = (position) => ({
+  track: HOST_TRACK,
+  playing: true,
+  position,
+  seq: 20,
+  clientTime: Date.now(),
+  publishedAt: Date.now(),
+  sourceClientId: "someone-else",
+});
+
+// 本机按下暂停
+state.logs.length = 0;
+state.events.playStateChange({ state: "paused", position: 61_000 });
+await settle(200);
+ok(
+  "本机暂停后进入脱离状态",
+  state.logs.some((line) => String(line[1]).includes("暂时脱离")),
+);
+
+// 别人还在放，但不该把我拉回去
+state.logs.length = 0;
+state.requests.length = 0;
+deliverPoll(othersPlaying(90_000), "someone-else");
+await settle(400);
+check(
+  "脱离期间不会被别人拉回播放",
+  state.logs.filter((line) => line[0] === "player" && String(line[1]).startsWith("seek")).length,
+  0,
+);
+check(
+  "脱离期间也不上报",
+  state.requests.filter((r) => r.url.endsWith("/publish")).length,
+  0,
+);
+
+// 本机按下继续 → 跳到大家此刻的进度
+state.logs.length = 0;
+state.events.playStateChange({ state: "playing", position: 61_000 });
+await settle(400);
+const seekLine = state.logs.find(
+  (line) => line[0] === "player" && String(line[1]).startsWith("seek"),
+);
+ok("继续播放时跳到了大家的进度", Boolean(seekLine));
+if (seekLine) {
+  const target = Number(String(seekLine[1]).replace("seek ", ""));
+  ok(
+    `跳转位置约等于对方的进度（${Math.round(target / 1000)}s，对方 90s）`,
+    target >= 88_000 && target <= 92_000,
+  );
+}
+
 /* ── 7. 重连不会让循环越攒越多 ─────────────────────────────────────────────── */
 
 console.log("\n[7] 重连：连改设置不会把轮询循环越攒越多");
