@@ -545,14 +545,17 @@ const publishHeartbeat = async (positionOverride) => {
  * @param options.force    跳过节流（播放/暂停、换歌要立刻反映出去）
  * @param options.asIntent 算不算「本机动手」—— 只有动手才能抢控制权，
  *                         歌词行进这类进度更新不能
+ * @param options.position 已知进度（毫秒）。事件刚发生时直接带上事件里的值，
+ *                         别再用 localPosition() 推算 —— CI/慢机器上时钟
+ *                         随时可能跳 1ms，严格断言「从 0 起算」就会被漂移打挂
  */
-const publishThrottled = ({ force = false, asIntent = false } = {}) => {
+const publishThrottled = ({ force = false, asIntent = false, position } = {}) => {
   const allowed = () => (asIntent ? canReportIntent() : canReport());
   if (!allowed()) return;
   if (publishPending) return;
   const elapsed = Date.now() - lastPublishAt;
   if (force || elapsed >= PUBLISH_THROTTLE_MS) {
-    void sendPublish();
+    void sendPublish(position);
     return;
   }
   publishPending = true;
@@ -1009,7 +1012,7 @@ splayer.player.on("trackChange", ({ track }) => {
 
   // 本机用户换了歌：立即上报（all 模式下这一步就把控制权拿到自己手里）
   if (canReportIntent()) {
-    publishThrottled({ force: true, asIntent: true });
+    publishThrottled({ force: true, asIntent: true, position: 0 });
     // 起播后真实进度会有几百毫秒，补一次准确值
     setTimeout(() => {
       void refreshPosition().then((position) => {
@@ -1039,7 +1042,7 @@ splayer.player.on("playStateChange", ({ state, position }) => {
     }
   }
 
-  publishThrottled({ force: true, asIntent: true });
+  publishThrottled({ force: true, asIntent: true, position });
 });
 
 splayer.player.on("lineChange", ({ position }) => {
