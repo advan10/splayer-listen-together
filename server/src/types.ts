@@ -2,7 +2,7 @@
  * 一起听 —— 服务端与插件之间的协议类型
  *
  * 这里的类型是「线上格式」的唯一权威定义；插件侧（纯 JS，无法 import）
- * 有一份等价的手写定义，改动时两边要一起改。见 docs/protocol.md。
+ * 有一份等价的手写定义，改动时两边要一起改。见 docs/zh/protocol-types.md（英文版 docs/en/protocol-types.md）。
  */
 
 /** SPlayer 的 Track.source：内置在线平台 + 本地 + 流媒体服务器 */

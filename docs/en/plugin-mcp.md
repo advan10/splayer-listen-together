@@ -8,7 +8,7 @@ Third of the plugin research notes. The [previous note](plugin-events.md) conclu
 
 ```ts
 play_track(trackId?: string, track?: Record<string, any>)
-  → 优先用 trackId 查本地曲库；查不到就用传入的 track 对象
+  → prefer trackId: look it up in the local library; if not found, use the passed-in track object
   → playerControl.playTrack(track)
 ```
 

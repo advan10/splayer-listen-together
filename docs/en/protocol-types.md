@@ -8,30 +8,30 @@
 interface RoomSnapshot {
   roomId: string;
   name: string;
-  /** 播放状态或成员变化都会 +1 */
+  /** Incremented on every playback or membership change */
   version: number;
   playback: Playback | null;
   hostClientId: string | null;
-  /** 谁能决定听什么：host 只有房主 / all 谁都可以 */
+  /** Who decides what to play: "host" is host-only, "all" lets anyone */
   controlMode: "host" | "all";
-  /** 当前唯一有权决定播放状态的人；空着表示谁都能接手（仅 all 模式） */
+  /** The one client currently allowed to drive playback; null means anyone may take over ("all" mode only) */
   driverClientId: string | null;
   members: MemberInfo[];
   serverTime: number;
-  /** 队列版本，队列一变就 +1；客户端据此决定要不要重新拉队列 */
+  /** Queue version, incremented whenever the queue changes; clients use it to decide whether to re-fetch the queue */
   queueVersion: number;
-  /** 队列长度；内容走 /queue 单独拉 */
+  /** Queue length; the contents are fetched separately via /queue */
   queueLength: number;
 }
 
 interface Playback {
   track: PluginTrack | null;
   playing: boolean;
-  /** 发布那一刻的进度（毫秒） */
+  /** Position (ms) at the moment of publishing */
   position: number;
   seq: number;
   clientTime: number;
-  /** 服务端收到该快照的时刻，进度推算的基准 */
+  /** When the server received the snapshot; the baseline for progress estimation */
   publishedAt: number;
   sourceClientId: string;
 }
@@ -41,7 +41,7 @@ interface MemberInfo {
   name: string;
   role: "host" | "guest";
   joinedAt: number;
-  /** 最近一次请求时刻，用来判定离线 */
+  /** Last request time, used to detect offline members */
   lastSeen: number;
 }
 ```
@@ -59,7 +59,7 @@ interface MemberInfo {
 Common shape:
 
 ```json
-{ "ok": false, "error": "房间口令不正确", "code": "BAD_ROOM_KEY" }
+{ "ok": false, "error": "Incorrect room key", "code": "BAD_ROOM_KEY" }
 ```
 
 The `error` text follows the server's `LOCALE` (see [Overview and Authentication](protocol-overview.md#error-message-localization)); **clients should rely on `code`**.
