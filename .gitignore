@@ -2,6 +2,12 @@
 node_modules/
 dist/
 
+# 包管理器用 pnpm（见 package.json 的 packageManager）。
+# 挡掉 npm 的 lockfile：谁本地跑一次 npm install 就会把它生成出来，
+# 两份 lockfile 并存会互相打架。
+package-lock.json
+yarn.lock
+
 # 本地配置（含服务端密钥），别进版本库；模板见 .env.example
 .env.local
 

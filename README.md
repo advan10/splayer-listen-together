@@ -12,7 +12,7 @@ Listen together on separate computers: a **SPlayer-Next control plugin plus a se
 - With MCP enabled, track switches and the queue sync to the local player automatically.
 - A web dashboard shows at a glance who is listening to what.
 
-Targets **NCM** by default (SPlayer's `ncm` source).
+Targets **NCM** by default (NetEase Cloud Music; SPlayer's `netease` source).
 
 ```
 ┌────────────────┐  report playback   ┌──────────────┐  long-poll push  ┌──────────────────┐
